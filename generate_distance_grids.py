@@ -10,7 +10,7 @@ topology_dir = 'E:/Users/John/Downloads/GPlates/data/vector/Muller_etal_AREPS_Su
 age_grid_dir = 'E:/Users/John/Downloads/GPlates/data/rasters/Muller_etal_2016_AREPS_Agegrids/netCDF_0-230Ma'
 #age_grid_dir = 'D:/Users/john/Downloads/gplates/data/Muller_etal_2016_AREPS_Agegrids/netCDF_0-230Ma'
 
-proximity_features_file = 'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v3.gpmlz'
+proximity_features_file = 'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz'
 
 grid_spacing = 1
 

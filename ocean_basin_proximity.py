@@ -25,10 +25,10 @@
 from __future__ import print_function
 import argparse
 from call_system_command import call_system_command
-import distance_points_to_geometries
 import math
 import multiprocessing
 import points_in_polygons
+import proximity_query
 import pygplates
 import subprocess
 import sys
@@ -564,7 +564,7 @@ def proximity_parallel(
                     proximity_reconstructed_geometry_proxies.append(proximity_reconstructed_feature_geometry.get_feature())
         
         # Find the minimum distance of each ocean basin point to all proximity reconstructed geometries.
-        proximity_features_closest_to_ocean_basin_points = distance_points_to_geometries.distances(
+        proximity_features_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
                 ocean_basin_reconstructed_points,
                 proximity_reconstructed_geometries,
                 proximity_reconstructed_geometry_proxies,

@@ -98,7 +98,6 @@ if __name__ == '__main__':
     
     try:
         num_cpus = multiprocessing.cpu_count()
-        num_cpus = 10
     except NotImplementedError:
         num_cpus = 1
 
