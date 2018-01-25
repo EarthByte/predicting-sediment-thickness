@@ -174,7 +174,8 @@ def find_closest_geometries_to_points(
         return_closest_index = False,
         geometries_are_solid = False,
         all_geometries = False,
-        subdivision_depth = points_spatial_tree.DEFAULT_SUBDIVISION_DEPTH):
+        subdivision_depth = points_spatial_tree.DEFAULT_SUBDIVISION_DEPTH,
+        geometry_filter = None):
     """
     Efficient point-to-geometry distance queries when there are many relatively uniformly spaced points to be tested against geometries.
     
@@ -245,7 +246,8 @@ def find_closest_geometries_to_points(
             return_closest_position,
             return_closest_index,
             geometries_are_solid,
-            all_geometries)
+            all_geometries,
+            geometry_filter)
 
 
 def find_closest_geometries_to_points_using_points_spatial_tree(
@@ -257,7 +259,8 @@ def find_closest_geometries_to_points_using_points_spatial_tree(
         return_closest_position = False,
         return_closest_index = False,
         geometries_are_solid = False,
-        all_geometries = False):
+        all_geometries = False,
+        geometry_filter = None):
     """
     Same as 'find_closest_geometries_to_points()' except 'spatial_tree_of_points' is a 'points_spatial_tree.PointsSpatialTree' of 'points'.
     
@@ -291,7 +294,8 @@ def find_closest_geometries_to_points_using_points_spatial_tree(
                 return_closest_position,
                 return_closest_index,
                 geometries_are_solid,
-                all_geometries)
+                all_geometries,
+                geometry_filter)
     
     return geometry_proxies_closest_to_points
 
@@ -305,7 +309,8 @@ def find_closest_points_to_geometries(
         return_closest_index = False,
         geometries_are_solid = False,
         all_points = False,
-        subdivision_depth = points_spatial_tree.DEFAULT_SUBDIVISION_DEPTH):
+        subdivision_depth = points_spatial_tree.DEFAULT_SUBDIVISION_DEPTH,
+        point_filter = None):
     """
     Efficient geometry-to-point distance queries when geometries are tested against many relatively uniformly spaced points.
     
@@ -376,7 +381,8 @@ def find_closest_points_to_geometries(
             return_closest_position,
             return_closest_index,
             geometries_are_solid,
-            all_points)
+            all_points,
+            point_filter)
 
 
 def find_closest_points_to_geometries_using_points_spatial_tree(
@@ -388,7 +394,8 @@ def find_closest_points_to_geometries_using_points_spatial_tree(
         return_closest_position = False,
         return_closest_index = False,
         geometries_are_solid = False,
-        all_points = False):
+        all_points = False,
+        point_filter = None):
     """
     Same as 'find_closest_points_to_geometries()' except 'spatial_tree_of_points' is a 'points_spatial_tree.PointsSpatialTree' of 'points'.
     
@@ -406,7 +413,7 @@ def find_closest_points_to_geometries_using_points_spatial_tree(
     # The point proxies closest to each geometry.
     point_proxies_closest_to_geometries = []
     
-    for geometry in geometries:
+    for geometry_index, geometry in enumerate(geometries):
         # By default geometry is not within threshold distance to any point.
         point_proxies_closest_to_geometry = None
         # Keep track of distance threshold per geometry (since it might get reduced when 'all_points' is False).
@@ -428,6 +435,7 @@ def find_closest_points_to_geometries_using_points_spatial_tree(
             point_proxies_closest_to_geometry, geometry_distance_threshold_radians = _visit_closest_points_to_geometry(
                     root_node,
                     geometry,
+                    geometry_index,
                     geometry_centroid,
                     points,
                     point_proxies,
@@ -436,7 +444,8 @@ def find_closest_points_to_geometries_using_points_spatial_tree(
                     return_closest_position,
                     return_closest_index,
                     geometries_are_solid,
-                    all_points)
+                    all_points,
+                    point_filter)
         
         point_proxies_closest_to_geometries.append(point_proxies_closest_to_geometry)
     
@@ -452,7 +461,8 @@ def find_closest_points_to_geometry(
         return_closest_index = False,
         geometry_is_solid = False,
         all_points = False,
-        subdivision_depth = points_spatial_tree.DEFAULT_SUBDIVISION_DEPTH):
+        subdivision_depth = points_spatial_tree.DEFAULT_SUBDIVISION_DEPTH,
+        geometry_filter = None):
     """
     Same as 'find_closest_points_to_geometries()' except with a single geometry instead of a list of geometries.
     
@@ -469,7 +479,8 @@ def find_closest_points_to_geometry(
             return_closest_index,
             geometry_is_solid,
             all_points,
-            subdivision_depth)
+            subdivision_depth,
+            geometry_filter)
     
     # There's only one geometry - return its result.
     return point_proxies_closest_to_geometries[0]
@@ -484,7 +495,8 @@ def find_closest_points_to_geometry_using_points_spatial_tree(
         return_closest_position = False,
         return_closest_index = False,
         geometry_is_solid = False,
-        all_points = False):
+        all_points = False,
+        geometry_filter = None):
     """
     Same as 'find_closest_points_to_geometries_using_points_spatial_tree()' except with a single geometry instead of a list of geometries.
     
@@ -500,7 +512,8 @@ def find_closest_points_to_geometry_using_points_spatial_tree(
             return_closest_position,
             return_closest_index,
             geometry_is_solid,
-            all_points)
+            all_points,
+            geometry_filter)
     
     # There's only one geometry - return its result.
     return point_proxies_closest_to_geometries[0]
@@ -522,7 +535,8 @@ def _visit_closest_geometries_to_points(
         return_closest_position,
         return_closest_index,
         geometries_are_solid,
-        all_geometries):
+        all_geometries,
+        geometry_filter):
     
     node_bounding_circle_centre, node_bounding_circle_radius = node.get_bounding_circle()
         
@@ -618,7 +632,8 @@ def _visit_closest_geometries_to_points(
                     return_closest_position,
                     return_closest_index,
                     geometries_are_solid,
-                    all_geometries)
+                    all_geometries,
+                    geometry_filter)
     else:
         for point_index in node.get_point_indices():
             point = points[point_index]
@@ -662,11 +677,13 @@ def _visit_closest_geometries_to_points(
                         geometry_proxy_to_point = (distance, geometry_proxy)
                     
                     if all_geometries:
-                        # Each point has a *list* of geometry proxies (or None).
-                        # Create list if first geometry proxy encountered for current point.
-                        if geometry_proxies_closest_to_points[point_index] is None:
-                            geometry_proxies_closest_to_points[point_index] = []
-                        geometry_proxies_closest_to_points[point_index].append(geometry_proxy_to_point)
+                        if (not geometry_filter or
+                            geometry_filter(*(geometry_proxy_to_point + (point_index,)))):
+                            # Each point has a *list* of geometry proxies (or None).
+                            # Create list if first geometry proxy encountered for current point.
+                            if geometry_proxies_closest_to_points[point_index] is None:
+                                geometry_proxies_closest_to_points[point_index] = []
+                            geometry_proxies_closest_to_points[point_index].append(geometry_proxy_to_point)
                     else:
                         # Only looking for closest geometry, so reduce distance threshold to closest so far.
                         distance_threshold_to_point = distance
@@ -675,12 +692,15 @@ def _visit_closest_geometries_to_points(
             # If only looking for closest geometry then only need to store closest geometry (not a list of geometries).
             if not all_geometries:
                 if closest_geometry_proxy_to_point is not None:
-                    geometry_proxies_closest_to_points[point_index] = closest_geometry_proxy_to_point
+                    if (not geometry_filter or
+                        geometry_filter(*(closest_geometry_proxy_to_point + (point_index,)))):
+                        geometry_proxies_closest_to_points[point_index] = closest_geometry_proxy_to_point
 
 
 def _visit_closest_points_to_geometry(
         node,
         geometry,
+        geometry_index,
         geometry_centroid,
         points,
         point_proxies,
@@ -689,7 +709,8 @@ def _visit_closest_points_to_geometry(
         return_closest_position,
         return_closest_index,
         geometry_is_solid,
-        all_points):
+        all_points,
+        point_filter = None):
     
     node_bounding_circle_centre, node_bounding_circle_radius = node.get_bounding_circle()
         
@@ -741,6 +762,7 @@ def _visit_closest_points_to_geometry(
             point_proxies_closest_to_geometry, distance_threshold_radians = _visit_closest_points_to_geometry(
                     child_node,
                     geometry,
+                    geometry_index,
                     geometry_centroid,
                     points,
                     point_proxies,
@@ -749,7 +771,8 @@ def _visit_closest_points_to_geometry(
                     return_closest_position,
                     return_closest_index,
                     geometry_is_solid,
-                    all_points)
+                    all_points,
+                    point_filter)
     else:
         # If only looking for closest point then keep track of it.
         if not all_points:
@@ -786,11 +809,13 @@ def _visit_closest_points_to_geometry(
                     point_proxy_to_geometry = (distance, point_proxy)
                 
                 if all_points:
-                    # Geometry has a *list* of point proxies (or None).
-                    # Create list if first point proxy encountered for geometry.
-                    if point_proxies_closest_to_geometry is None:
-                        point_proxies_closest_to_geometry = []
-                    point_proxies_closest_to_geometry.append(point_proxy_to_geometry)
+                    if (not point_filter or
+                        point_filter(*(point_proxy_to_geometry + (geometry_index,)))):
+                        # Geometry has a *list* of point proxies (or None).
+                        # Create list if first point proxy encountered for geometry.
+                        if point_proxies_closest_to_geometry is None:
+                            point_proxies_closest_to_geometry = []
+                        point_proxies_closest_to_geometry.append(point_proxy_to_geometry)
                 else:
                     # Only looking for closest point, so reduce distance threshold to closest so far.
                     distance_threshold_radians = distance
@@ -799,7 +824,9 @@ def _visit_closest_points_to_geometry(
         # If only looking for closest point then only need to store closest point (not a list of points).
         if not all_points:
             if closest_point_proxy_to_geometry is not None:
-                point_proxies_closest_to_geometry = closest_point_proxy_to_geometry
+                if (not point_filter or
+                    point_filter(*(closest_point_proxy_to_geometry + (geometry_index,)))):
+                    point_proxies_closest_to_geometry = closest_point_proxy_to_geometry
     
     return point_proxies_closest_to_geometry, distance_threshold_radians
 
@@ -814,8 +841,8 @@ def _visit_closest_points_to_geometry(
 #    
 #    
 #    print('Loading coastline polygons and rotation model...')
-#    coastline_features = pygplates.FeatureCollection('../../../sample_data/2.0/SampleData/FeatureCollections/Coastlines/Matthews_etal_GPC_2016_Coastlines.gpmlz')
-#    rotation_model = pygplates.RotationModel('../../../sample_data/2.0/SampleData/FeatureCollections/Rotations/Matthews_etal_GPC_2016_410-0Ma_GK07.rot')
+#    coastline_features = pygplates.FeatureCollection('../../../../sample_data/2.0/SampleData/FeatureCollections/Coastlines/Matthews_etal_GPC_2016_Coastlines.gpmlz')
+#    rotation_model = pygplates.RotationModel('../../../../sample_data/2.0/SampleData/FeatureCollections/Rotations/Matthews_etal_GPC_2016_410-0Ma_GK07.rot')
 #    
 #    print('Reconstructing coastline polygons...')
 #    reconstruction_time = 200
@@ -859,12 +886,25 @@ def _visit_closest_points_to_geometry(
 #        #
 #        # The fast way (about 3 seconds).
 #        #
+#        
+#        # Dodgy optional geometry filter - doesn't add any extra functionality
+#        # (just replicates distance test already done inside 'find_closest_geometries_to_points()'.
+#        # It's just here to test that it works.
+#        gd = dict(zip(geometry_features, range(len(geometry_features))))
+#        def geometry_filter(distance, geometry_feature, point_index):
+#            geometry_index = gd[geometry_feature]
+#            new_distance = pygplates.GeometryOnSphere.distance(points[point_index], geometries[geometry_index])
+#            if new_distance is None:
+#                return False
+#            return new_distance < distance_threshold_radians
+#        
 #        geometry_features_closest_to_points = find_closest_geometries_to_points(
 #                points,
 #                geometries,
 #                geometry_features,
 #                distance_threshold_radians = distance_threshold_radians,
 #                all_geometries=True)
+#                #geometry_filter=geometry_filter)
 #    else:
 #        #
 #        # The slow way (about 270 seconds).

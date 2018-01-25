@@ -1,7 +1,9 @@
 from __future__ import print_function
+from call_system_command import call_system_command
+import math
+import multiprocessing
 import os
 import sys
-from call_system_command import call_system_command
 
 output_dir = 'distances_1d'
 
@@ -12,9 +14,14 @@ age_grid_dir = 'E:/Users/John/Downloads/GPlates/data/rasters/Muller_etal_2016_AR
 
 proximity_features_file = 'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz'
 
-grid_spacing = 1
+grid_spacing = 1.0
 
-for time in range(0, 231):
+min_time = 0
+max_time = 230
+time_step = 1
+
+
+def generate_distance_grid(time):
     
     command_line = [
             'python',
@@ -41,12 +48,13 @@ for time in range(0, 231):
             '{0}'.format(grid_spacing),
             '-j',
             '-w',
+            '-c',
+            str(1),
             '{0}/distance_{1}_{2}'.format(output_dir, grid_spacing, time)]
     
     print('Time:', time)
     
-    # Capture stderr since pygplates generates a bunch of topology warning messages which we just ignore.
-    stderr = call_system_command(command_line, return_stderr=True)
+    call_system_command(command_line)
     
     # Rename the mean distance files so that 'time' is at the end of the base filename -
     # this way we can import them as time-dependent raster into GPlates.
@@ -60,3 +68,45 @@ for time in range(0, 231):
         if os.access(dst_mean_distance, os.R_OK):
             os.remove(dst_mean_distance)
         os.rename(src_mean_distance, dst_mean_distance)
+
+
+# Wraps around 'generate_distance_grid()' so can be used by multiprocessing.Pool.map()
+# which requires a single-argument function.
+def generate_distance_grid_parallel_pool_function(args):
+    try:
+        return generate_distance_grid(*args)
+    except KeyboardInterrupt:
+        pass
+
+
+
+if __name__ == '__main__':
+    
+    #generate_distance_grid(197)
+    #sys.exit(0)
+    
+    try:
+        num_cpus = multiprocessing.cpu_count()
+    except NotImplementedError:
+        num_cpus = 1
+    
+    #num_cpus = 11
+    
+    print('Generating distance grids...')
+    
+    # Split the workload across the CPUs.
+    pool = multiprocessing.Pool(num_cpus)
+    pool_map_async_result = pool.map_async(
+            generate_distance_grid_parallel_pool_function,
+            (
+                (
+                    time,
+                ) for time in range(min_time, max_time + 1, time_step)
+                #) for time in range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
+            ),
+            1) # chunksize
+
+    # Apparently if we use pool.map_async instead of pool.map and then get the results
+    # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+    # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+    pool_map_async_result.get(99999)

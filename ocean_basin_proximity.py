@@ -30,8 +30,12 @@ import multiprocessing
 import points_in_polygons
 import proximity_query
 import pygplates
+import shortest_path
 import subprocess
 import sys
+
+
+USE_SHORTEST_DISTANCE = True
 
 
 # Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
@@ -53,7 +57,7 @@ def read_input_points(input_points_filename):
 
             # Need at least two strings per line (for latitude and longitude).
             if len(line_string_list) < 2:
-                print('Line {0}: Ignoring point - line does not have at least two white-space separated strings.'.format(
+                print('WARNING: Line {0}: Ignoring point - line does not have at least two white-space separated strings.'.format(
                         line_number), file=sys.stderr)
                 continue
 
@@ -63,7 +67,7 @@ def read_input_points(input_points_filename):
                 lon = float(line_string_list[0])
                 lat = float(line_string_list[1])
             except ValueError:
-                print('Line {0}: Ignoring point - cannot read lon/lat values.'.format(line_number), file=sys.stderr)
+                print('WARNING: Line {0}: Ignoring point - cannot read lon/lat values.'.format(line_number), file=sys.stderr)
                 continue
 
             input_points.append((lon, lat))
@@ -74,42 +78,42 @@ def read_input_points(input_points_filename):
 def generate_input_points_grid(grid_spacing_degrees):
     
     if grid_spacing_degrees == 0:
-        return
+        raise ValueError('Grid spacing cannot be zero.')
     
     input_points = []
     
-    # Data points start *on* dateline (-180).
-    # If 180 is an integer multiple of grid spacing then final longitude also lands on dateline (+180).
-    num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
-    num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
-    for lat_index in range(num_latitudes):
-        lat = -90 + lat_index * grid_spacing_degrees
-        
-        for lon_index in range(num_longitudes):
-            lon = -180 + lon_index * grid_spacing_degrees
-            
-            input_points.append((lon, lat))
-
-    # num_latitudes = int(math.floor(180.0 / grid_spacing_degrees))
-    # num_longitudes = int(math.floor(360.0 / grid_spacing_degrees))
+    # # Data points start *on* dateline (-180).
+    # # If 180 is an integer multiple of grid spacing then final longitude also lands on dateline (+180).
+    # num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
+    # num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
     # for lat_index in range(num_latitudes):
-    #     # The 0.5 puts the point in the centre of the grid pixel.
-    #     # This also avoids sampling right on the poles.
-    #     lat = -90 + (lat_index + 0.5) * grid_spacing_degrees
+    #     lat = -90 + lat_index * grid_spacing_degrees
     #     
     #     for lon_index in range(num_longitudes):
-    #         # The 0.5 puts the point in the centre of the grid pixel.
-    #         # This also avoids sampling right on the dateline where there might be
-    #         # age grid or static polygon artifacts.
-    #         lon = -180 + (lon_index + 0.5) * grid_spacing_degrees
+    #         lon = -180 + lon_index * grid_spacing_degrees
     #         
     #         input_points.append((lon, lat))
+
+    num_latitudes = int(math.floor(180.0 / grid_spacing_degrees))
+    num_longitudes = int(math.floor(360.0 / grid_spacing_degrees))
+    for lat_index in range(num_latitudes):
+        # The 0.5 puts the point in the centre of the grid pixel.
+        # This also avoids sampling right on the poles.
+        lat = -90 + (lat_index + 0.5) * grid_spacing_degrees
+        
+        for lon_index in range(num_longitudes):
+            # The 0.5 puts the point in the centre of the grid pixel.
+            # This also avoids sampling right on the dateline where there might be
+            # age grid or static polygon artifacts.
+            lon = -180 + (lon_index + 0.5) * grid_spacing_degrees
+            
+            input_points.append((lon, lat))
     
     return (input_points, num_longitudes, num_latitudes)
 
 
 # Returns a list of ages (one per (lon, lat) point in the 'input_points' list).
-# For input points outside the age grid then ages will be Nan (ie, 'math.isnan(age)' will return True).
+# Input points outside the age grid are ignored.
 def get_positions_and_ages(input_points, age_grid_filename):
     
     input_points_data = ''.join('{0} {1}\n'.format(lon, lat) for lon, lat in input_points)
@@ -137,7 +141,7 @@ def get_positions_and_ages(input_points, age_grid_filename):
             continue
         
         if num_values < 3:
-            print('Ignoring line "{0}" - has fewer than 3 white-space separated numbers.'.format(line), file=sys.stderr)
+            print('WARNING: Ignoring line "{0}" - has fewer than 3 white-space separated numbers.'.format(line), file=sys.stderr)
             continue
             
         try:
@@ -150,11 +154,11 @@ def get_positions_and_ages(input_points, age_grid_filename):
             
             # If the point is outside the ocean basin region then the age grid will return 'NaN'.
             if math.isnan(age):
-                #print('Ignoring line "{0}" - point is outside ocean basin (age grid).'.format(line), file=sys.stderr)
+                #print('WARNING: Ignoring line "{0}" - point is outside ocean basin (age grid).'.format(line), file=sys.stderr)
                 continue
             
         except ValueError:
-            print('Ignoring line "{0}" - cannot read floating-point lon, lat and age values.'.format(line), file=sys.stderr)
+            print('WARNING: Ignoring line "{0}" - cannot read floating-point lon, lat and age values.'.format(line), file=sys.stderr)
             continue
         
         lon_lat_age_list.append((lon, lat, age))
@@ -168,7 +172,7 @@ def find_overriding_plate(subduction_shared_sub_segment, time, reconstructed_poi
     # Get the subduction polarity of the nearest subducting line.
     subduction_polarity = subduction_shared_sub_segment.get_feature().get_enumeration(pygplates.PropertyName.gpml_subduction_polarity)
     if (not subduction_polarity) or (subduction_polarity == 'Unknown'):
-        print('Unable to find the overriding plate of the nearest subducting line "{0}"'.format(
+        print('WARNING: Unable to find the overriding plate of the nearest subducting line "{0}"'.format(
             subduction_shared_sub_segment.get_feature().get_name()), file=sys.stderr)
         print('    subduction zone feature is missing subduction polarity property or it is set to "Unknown".', file=sys.stderr)
         return
@@ -203,7 +207,7 @@ def find_overriding_plate(subduction_shared_sub_segment, time, reconstructed_poi
                 break
     
     if overriding_plate is None:
-        print('Unable to find the overriding plate of the nearest subducting line "{0}" at {1}Ma for reconstructed point {2}'.format(
+        print('WARNING: Unable to find the overriding plate of the nearest subducting line "{0}" at {1}Ma for reconstructed point {2}'.format(
             subduction_shared_sub_segment.get_feature().get_name(), time, reconstructed_point.to_lat_lon()), file=sys.stderr)
         print('    topology on overriding side of subducting line is missing.', file=sys.stderr)
         return
@@ -289,28 +293,44 @@ def write_xyz_file(output_filename, output_data):
             output_file.write(' '.join(str(item) for item in output_line) + '\n')
 
 
-def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes):
+def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes, use_nearneighbor = True):
     
-    # The command-line strings to execute GMT 'nearneighbor'.
-    # For example "nearneighbor output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -N4 -S1d -Goutput_mean_distance.grd=cf"
-    # ...with "=cf" generating NetCDF-3, instead of NetCDF-4, files (GPlates 2.0 can only load NetCDF-3).
-    gmt_command_line = [
-            "gmt",
-            "nearneighbor",
-            xyz_filename.encode(sys.getfilesystemencoding()),
-            "-N4",
-            "-S{0}d".format(1.5 * grid_spacing),
-            "-I{0}".format(grid_spacing),
-            # Use GMT gridline registration since our input point grid has data points on the grid lines.
-            # Gridline registration is the default so we don't need to force pixel registration...
-            #"-r", # Force pixel registration since data points are at centre of cells.
-            "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
-            #"-R{0}/{1}/{2}/{3}".format(
-            #        -180 + 0.5 * grid_spacing,
-            #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
-            #        -90 + 0.5 * grid_spacing,
-            #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
-            "-G{0}=cf".format(grd_filename.encode(sys.getfilesystemencoding()))]
+    if use_nearneighbor:
+        # The command-line strings to execute GMT 'nearneighbor'.
+        # For example "nearneighbor output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -N4 -S1d -Goutput_mean_distance.grd".
+        gmt_command_line = [
+                "gmt",
+                "nearneighbor",
+                xyz_filename.encode(sys.getfilesystemencoding()),
+                "-N4/1", # Divide search radius into 4 sectors but only require a value in 1 sector.
+                "-S{0}d".format(0.7 * grid_spacing),
+                "-I{0}".format(grid_spacing),
+                # # Use GMT gridline registration since our input point grid has data points on the grid lines.
+                # # Gridline registration is the default so we don't need to force pixel registration...
+                "-r", # Force pixel registration since data points are at centre of cells.
+                "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
+                #"-R{0}/{1}/{2}/{3}".format(
+                #        -180 + 0.5 * grid_spacing,
+                #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
+                #        -90 + 0.5 * grid_spacing,
+                #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
+                "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
+    else:
+        # The command-line strings to execute GMT 'xyz2grd'.
+        # For example "xyz2grd output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -Goutput_mean_distance.grd".
+        gmt_command_line = [
+                "gmt",
+                "xyz2grd",
+                xyz_filename.encode(sys.getfilesystemencoding()),
+                "-I{0}".format(grid_spacing),
+                "-R-180/180/-90/90",
+                "-r", # Force pixel registration since data points are at centre of cells.
+                #"-R{0}/{1}/{2}/{3}".format(
+                #        -180 + 0.5 * grid_spacing,
+                #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
+                #        -90 + 0.5 * grid_spacing,
+                #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
+                "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
     
     call_system_command(gmt_command_line)
 
@@ -388,58 +408,65 @@ class ProximityData(object):
             self.get_feature_data(feature_name).update(other_feature_data)
 
 
-def proximity_parallel(
-    input_points, # List of (lon, lat) tuples.
-    rotation_filenames,
-    proximity_filenames,
-    proximity_features_are_topological,
-    proximity_feature_types,
-    topological_reconstruction_filenames,
-    max_topological_reconstruction_time,
-    age_grid_filename,
-    age_grid_paleo_time,
-    time_increment,
-    output_distance_with_time,
-    output_overriding_plate_with_time,
-    output_mean_distance,
-    output_standard_deviation_distance,
-    output_all_proximity_distances,
-    anchor_plate_id = 0,
-    proximity_distance_threshold_radians = None):
+def proximity(
+        input_points, # List of (lon, lat) tuples.
+        rotation_filenames,
+        proximity_filenames,
+        proximity_features_are_topological,
+        proximity_feature_types,
+        topological_reconstruction_filenames,
+        max_topological_reconstruction_time,
+        age_grid_filename,
+        age_grid_paleo_time,
+        time_increment,
+        output_distance_with_time,
+        output_overriding_plate_with_time,
+        output_mean_distance,
+        output_standard_deviation_distance,
+        output_all_proximity_distances,
+        anchor_plate_id = 0,
+        proximity_distance_threshold_radians = None):
+    """
+    Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
+    
+    If an ocean basin point falls outside the age grid (in masked region) then it is ignored.
+    
+    A threshold distance can be specified to reject proximities exceeding it.
+    
+    The proximity results are returned in a single ProximityData object.
+    Returns None if all input points are outside the age grid (in masked regions).
+    """
     
     if time_increment <= 0:
-        print('The time increment "{0}" is not positive and non-zero.'.format(time_increment), file=sys.stderr)
-        return
+        raise ValueError('The time increment "{0}" is not positive and non-zero.'.format(time_increment))
     
     if age_grid_paleo_time < 0:
-        print('The age grid paleo time "{0}" is not positive or zero.'.format(age_grid_paleo_time), file=sys.stderr)
-        return
+        raise ValueError('The age grid paleo time "{0}" is not positive or zero.'.format(age_grid_paleo_time))
     
     if (not output_distance_with_time and
         not output_overriding_plate_with_time and
         not output_mean_distance and
         not output_standard_deviation_distance):
-        print('No output specified.', file=sys.stderr)
-        return
+        raise ValueError('No output specified for ocean basin proximity.')
     
     if (output_all_proximity_distances and
         proximity_features_are_topological):
-        print('Outputting all proximity distances not supported for topological features.', file=sys.stderr)
-        return
+        raise ValueError('Outputting all proximity distances not supported for topological features.')
     
     # Make sure user provides *topological* proximity features and specifies subduction zone when
     # they want to output overriding plate IDs.
     if output_overriding_plate_with_time:
         if not proximity_features_are_topological:
-            return
+            raise ValueError('Must provide topological features when outputting overriding plate over time.')
         if (not proximity_feature_types or
             len(proximity_feature_types) != 1 or
             proximity_feature_types[0] != pygplates.FeatureType.gpml_subduction_zone.get_name()):
-            return
+            raise ValueError('Subduction zone must be the only feature type when outputting overriding plate over time.')
     
     # Get the input point ages.
     lon_lat_age_list = get_positions_and_ages(input_points, age_grid_filename)
     if not lon_lat_age_list:
+        # There are no input points inside the age grid (in non-masked regions).
         return
     
     # For each ocean basin point (and associated age) create a tuple containing
@@ -480,6 +507,12 @@ def proximity_parallel(
     
     # All proximity data to return to caller.
     proximity_data = ProximityData()
+    
+    if USE_SHORTEST_DISTANCE:
+        #print('Creating shortest path grid...')
+        shortest_path_grid = shortest_path.Grid(6)
+        obstacle_features = pygplates.FeatureCollection(
+                r'E:\Users\John\Downloads\GPlates\data\vector\Muller_etal_AREPS_Supplement\Global_EarthByte_230-0Ma_GK07_AREPS_Coastlines.gpml')
     
     # Iterate from paleo time until we exceed the maximum begin time of all ocean basin point locations.
     min_time_index = int(math.ceil(age_grid_paleo_time / time_increment))
@@ -563,51 +596,92 @@ def proximity_parallel(
                 if proximity_reconstructed_geometry_proxies is not None:
                     proximity_reconstructed_geometry_proxies.append(proximity_reconstructed_feature_geometry.get_feature())
         
-        # Find the minimum distance of each ocean basin point to all proximity reconstructed geometries.
-        proximity_features_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
-                ocean_basin_reconstructed_points,
-                proximity_reconstructed_geometries,
-                proximity_reconstructed_geometry_proxies,
-                distance_threshold_radians = proximity_distance_threshold_radians,
-                # Does each point get a list of all geometries within threshold distance (instead of just the closest) ? ...
-                all_geometries = output_all_proximity_distances)
+        if USE_SHORTEST_DISTANCE:
+            obstacle_reconstructed_feature_geometries = []
+            pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time, anchor_plate_id)
+            obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
+                    for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
+
+            topology_obstacle_feature_types = [pygplates.FeatureType.gpml_mid_ocean_ridge, pygplates.FeatureType.gpml_subduction_zone]
+            topology_obstacle_resolved_topologies = []
+            topology_obstacle_shared_boundary_sections = []
+            pygplates.resolve_topologies(topology_reconstruction_features, rotation_model, topology_obstacle_resolved_topologies, time, topology_obstacle_shared_boundary_sections)
+            for topology_obstacle_shared_boundary_section in topology_obstacle_shared_boundary_sections:
+                # Skip sections that are not included in the list of boundary feature types (if any).
+                topology_obstacle_feature = topology_obstacle_shared_boundary_section.get_feature()
+                if (topology_obstacle_feature_types and
+                    topology_obstacle_feature.get_feature_type() not in topology_obstacle_feature_types):
+                    continue
+                
+                for topology_obstacle_shared_sub_segment in topology_obstacle_shared_boundary_section.get_shared_sub_segments():
+                    obstacle_reconstructed_geometries.append(topology_obstacle_shared_sub_segment.get_resolved_geometry())
+            
+            #print('Creating obstacle grid...')
+            shortest_path_obstacle_grid = shortest_path_grid.create_obstacle_grid(obstacle_reconstructed_geometries)
+            #print('Creating distance grid...')
+            shortest_path_distance_grid = shortest_path_obstacle_grid.create_distance_grid(
+                    proximity_reconstructed_geometries, proximity_distance_threshold_radians)
+            
+            #print('Querying distances to {0} ocean points...'.format(len(ocean_basin_reconstructed_points)))
+            proximity_features_closest_to_ocean_basin_points = []
+            for ocean_basin_reconstructed_point in ocean_basin_reconstructed_points:
+                distance = shortest_path_distance_grid.shortest_distance(ocean_basin_reconstructed_point)
+                if distance is None:
+                    proximity_features_closest_to_ocean_basin_points.append(None)
+                else:
+                    proximity_features_closest_to_ocean_basin_points.append((distance, None)) # Hack: proxy not used yet.
+            #print('...finished querying distances to ocean points.')
+            
+        else:
+            # Find the minimum distance of each ocean basin point to all proximity reconstructed geometries.
+            proximity_features_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
+                    ocean_basin_reconstructed_points,
+                    proximity_reconstructed_geometries,
+                    proximity_reconstructed_geometry_proxies,
+                    distance_threshold_radians = proximity_distance_threshold_radians,
+                    # Does each point get a list of all geometries within threshold distance (instead of just the closest) ? ...
+                    all_geometries = output_all_proximity_distances)
         
         # Iterate over all reconstructed ocean basin points.
         for ocean_basin_point_index, proximity_feature_closest_to_ocean_basin_point in enumerate(proximity_features_closest_to_ocean_basin_points):
-            if proximity_feature_closest_to_ocean_basin_point is None:
-                # All geometries were further than the distance threshold, so skip current point.
-                continue
             
             # Mapping of proximity feature names to proximity distances (in radians).
             # The special key 'None' is associated with the *nearest* proximity distance over *all* proximity features.
             ocean_basin_proximities = {}
             
             if output_all_proximity_distances:
-                # 'proximity_feature_closest_to_ocean_basin_point' is actually a list of all proximity features
-                # within the distance threshold of the current ocean basin point (not just the closest proximity feature).
-                proximity_features_closest_to_ocean_basin_point = proximity_feature_closest_to_ocean_basin_point
-                
-                # The minimum distance of the current ocean basin point to all reconstructed proximity features.
-                min_distance_to_all_proximity_features = None
-                for min_distance_to_proximity_feature, proximity_feature in proximity_features_closest_to_ocean_basin_point:
-                    proximity_feature_name = proximity_feature.get_name()
-                    # Set proximity to the minimum distance to all features with the same name (if any).
-                    # A proximity feature may have more than one geometry (we choose the closest one for that feature).
-                    if proximity_feature_name in ocean_basin_proximities:
-                        if min_distance_to_proximity_feature < ocean_basin_proximities[proximity_feature_name]:
-                            ocean_basin_proximities[proximity_feature_name] = min_distance_to_proximity_feature
-                    else:
-                        ocean_basin_proximities[proximity_feature_name] = min_distance_to_proximity_feature
+                if proximity_feature_closest_to_ocean_basin_point is not None:
+                    # 'proximity_feature_closest_to_ocean_basin_point' is actually a list of all proximity features
+                    # within the distance threshold of the current ocean basin point (not just the closest proximity feature).
+                    proximity_features_closest_to_ocean_basin_point = proximity_feature_closest_to_ocean_basin_point
                     
-                    # If the current feature is the closest of all the features so far.
-                    if (min_distance_to_all_proximity_features is None or
-                            min_distance_to_proximity_feature < min_distance_to_all_proximity_features):
-                        min_distance_to_all_proximity_features = min_distance_to_proximity_feature
+                    # The minimum distance of the current ocean basin point to all reconstructed proximity features.
+                    min_distance_to_all_proximity_features = None
+                    for min_distance_to_proximity_feature, proximity_feature in proximity_features_closest_to_ocean_basin_point:
+                        proximity_feature_name = proximity_feature.get_name()
+                        # Set proximity to the minimum distance to all features with the same name (if any).
+                        # A proximity feature may have more than one geometry (we choose the closest one for that feature).
+                        if proximity_feature_name in ocean_basin_proximities:
+                            if min_distance_to_proximity_feature < ocean_basin_proximities[proximity_feature_name]:
+                                ocean_basin_proximities[proximity_feature_name] = min_distance_to_proximity_feature
+                        else:
+                            ocean_basin_proximities[proximity_feature_name] = min_distance_to_proximity_feature
+                        
+                        # If the current feature is the closest of all the features so far.
+                        if (min_distance_to_all_proximity_features is None or
+                                min_distance_to_proximity_feature < min_distance_to_all_proximity_features):
+                            min_distance_to_all_proximity_features = min_distance_to_proximity_feature
+                # TODO... else:
                 
                 # Minimum distance to *all* proximity features is represented by 'None'.
                 ocean_basin_proximities[None] = min_distance_to_all_proximity_features
             else:
-                min_distance_to_all_proximity_features, _ = proximity_feature_closest_to_ocean_basin_point
+                if proximity_feature_closest_to_ocean_basin_point is not None:
+                    min_distance_to_all_proximity_features, _ = proximity_feature_closest_to_ocean_basin_point
+                else:
+                    # All proximity geometries are unreachable or further than distance threshold.
+                    # Use longest great circle distance between two points on the globe to represent this.
+                    min_distance_to_all_proximity_features = math.pi
                 # Minimum distance to *all* proximity features is represented by 'None'.
                 ocean_basin_proximities[None] = min_distance_to_all_proximity_features
             
@@ -692,12 +766,12 @@ def proximity_parallel(
 # requires a single-argument function.
 def proximity_parallel_pool_function(args):
     try:
-        return proximity_parallel(*args)
+        return proximity(*args)
     except KeyboardInterrupt:
         pass
 
 
-def proximity(
+def proximity_parallel(
         input_points, # List of (lon, lat) tuples.
         rotation_filenames,
         proximity_filenames,
@@ -713,38 +787,10 @@ def proximity(
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
-        num_cpus, # If None then defaults to all available CPUs.
         anchor_plate_id = 0,
-        proximity_distance_threshold_kms = None):
-    
-    if time_increment <= 0:
-        print('The time increment "{0}" is not positive and non-zero.'.format(time_increment), file=sys.stderr)
-        return
-    
-    if age_grid_paleo_time < 0:
-        print('The age grid paleo time "{0}" is not positive or zero.'.format(age_grid_paleo_time), file=sys.stderr)
-        return
-    
-    if (not output_distance_with_time and
-        not output_overriding_plate_with_time and
-        not output_mean_distance and
-        not output_standard_deviation_distance):
-        print('No output specified.', file=sys.stderr)
-        return
-    
-    if (output_all_proximity_distances and
-        proximity_features_are_topological):
-        print('Outputting all proximity distances not supported for topological features.', file=sys.stderr)
-        return
-    
-    # Make sure user provides *topological* proximity features and specifies subduction zone when
-    # they want to output overriding plate IDs.
-    if output_overriding_plate_with_time:
-        if not proximity_features_are_topological:
-            return
-        if (len(proximity_feature_types) != 1 or
-            proximity_feature_types[0] != pygplates.FeatureType.gpml_subduction_zone.get_name()):
-            return
+        proximity_distance_threshold_radians = None,
+        # If None then defaults to all available CPUs...
+        num_cpus = None):
     
     # If the user requested all available CPUs then attempt to find out how many there are.
     if not num_cpus:
@@ -753,39 +799,31 @@ def proximity(
         except NotImplementedError:
             num_cpus = 1
     
-    # Convert maximum proximity distance from Kms to radians (if it was specified).
-    if proximity_distance_threshold_kms is None:
-        proximity_distance_threshold_radians = None
-    else:
-        proximity_distance_threshold_radians = proximity_distance_threshold_kms / pygplates.Earth.mean_radius_in_kms
-        if proximity_distance_threshold_radians > 2 * math.pi:
-            # Exceeds circumference of Earth so no need for threshold.
-            proximity_distance_threshold_radians = None
-    
     #
-    # Can uncomment this when there are exceptions in order to determine which source code line.
+    # No need for parallelisation if number of CPUs is one.
     #
-    # Once goes through multiprocessing pools then lose error locations in source code.
+    # Also can use this when there are exceptions in order to determine which source code line.
+    # Because once goes through multiprocessing pools then lose error locations in source code.
     #
-    
-    # return proximity_parallel(
-        # input_points, # List of (lon, lat) tuples.
-        # rotation_filenames,
-        # proximity_filenames,
-        # proximity_features_are_topological,
-        # proximity_feature_types,
-        # topological_reconstruction_filenames,
-        # max_topological_reconstruction_time,
-        # age_grid_filename,
-        # age_grid_paleo_time,
-        # time_increment,
-        # output_distance_with_time,
-        # output_overriding_plate_with_time,
-        # output_mean_distance,
-        # output_standard_deviation_distance,
-        # output_all_proximity_distances,
-        # anchor_plate_id,
-        # proximity_distance_threshold_radians)
+    if num_cpus == 1:
+        return proximity(
+            input_points, # List of (lon, lat) tuples.
+            rotation_filenames,
+            proximity_filenames,
+            proximity_features_are_topological,
+            proximity_feature_types,
+            topological_reconstruction_filenames,
+            max_topological_reconstruction_time,
+            age_grid_filename,
+            age_grid_paleo_time,
+            time_increment,
+            output_distance_with_time,
+            output_overriding_plate_with_time,
+            output_mean_distance,
+            output_standard_deviation_distance,
+            output_all_proximity_distances,
+            anchor_plate_id,
+            proximity_distance_threshold_radians)
     
     # Divide the input points into sub-lists (each to be run on a separate process).
     # Give each task a reasonable number of points to process - if there's not enough input points
@@ -794,7 +832,8 @@ def proximity(
     # So we could reduce the number of tasks (increase input points per task) to the number of CPUs.
     # However some tasks might finish sooner than others leaving some CPUs under utilised.
     # So we double the number of tasks (twice number of CPUs) to counteract this to some extent.
-    num_tasks = max(2 * num_cpus, int(len(input_points) / 25000))
+    #num_tasks = max(2 * num_cpus, int(len(input_points) / 25000))
+    num_tasks = num_cpus
     #print('num_tasks', num_tasks)
     
     # Create the pool sub-lists.
@@ -805,39 +844,44 @@ def proximity(
             for i in xrange(num_tasks)]
     
     # Split the workload across the CPUs.
-    pool = multiprocessing.Pool(num_cpus)
-    pool_map_async_result = pool.map_async(
-            proximity_parallel_pool_function,
-            (
-                (
-                    pool_input_points_sub_list,
-                    rotation_filenames,
-                    proximity_filenames,
-                    proximity_features_are_topological,
-                    proximity_feature_types,
-                    topological_reconstruction_filenames,
-                    max_topological_reconstruction_time,
-                    age_grid_filename,
-                    age_grid_paleo_time,
-                    time_increment,
-                    output_distance_with_time,
-                    output_overriding_plate_with_time,
-                    output_mean_distance,
-                    output_standard_deviation_distance,
-                    output_all_proximity_distances,
-                    anchor_plate_id,
-                    proximity_distance_threshold_radians
-                ) for pool_input_points_sub_list in pool_input_points_sub_lists
-            ),
-            1) # chunksize
-    
-    # Apparently if we use pool.map_async instead of pool.map and then get the results
-    # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-    # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
     try:
-        pool_proximity_datas = pool_map_async_result.get(99999)
-    except KeyboardInterrupt:
-        return
+        pool = multiprocessing.Pool(num_cpus)
+        pool_map_async_result = pool.map_async(
+                proximity_parallel_pool_function,
+                (
+                    (
+                        pool_input_points_sub_list,
+                        rotation_filenames,
+                        proximity_filenames,
+                        proximity_features_are_topological,
+                        proximity_feature_types,
+                        topological_reconstruction_filenames,
+                        max_topological_reconstruction_time,
+                        age_grid_filename,
+                        age_grid_paleo_time,
+                        time_increment,
+                        output_distance_with_time,
+                        output_overriding_plate_with_time,
+                        output_mean_distance,
+                        output_standard_deviation_distance,
+                        output_all_proximity_distances,
+                        anchor_plate_id,
+                        proximity_distance_threshold_radians
+                    ) for pool_input_points_sub_list in pool_input_points_sub_lists
+                ),
+                1) # chunksize
+        
+        # Apparently if we use pool.map_async instead of pool.map and then get the results
+        # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+        # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+        try:
+            pool_proximity_datas = pool_map_async_result.get(99999)
+        except KeyboardInterrupt:
+            # Note: 'finally' block below gets executed before returning.
+            return
+    finally:
+        pool.close()
+        pool.join()
     
     #
     # Extract and merge all proximity data from the pools.
@@ -882,7 +926,11 @@ def write_proximity_data(
                 write_xyz_file(xyz_filename, proximity_feature_time_data)
                 if output_grd_files:
                     grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-                    write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes)
+                    write_grd_file_from_xyz(
+                            grd_filename, xyz_filename, grid_spacing,
+                            num_grid_longitudes, num_grid_latitudes,
+                            # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
+                            use_nearneighbor=True)
         
         if output_mean_distance:
             if feature_name is not None:
@@ -897,7 +945,11 @@ def write_proximity_data(
             write_xyz_file(xyz_mean_distance_filename, proximity_feature_data.get_mean_data())
             if output_grd_files:
                 grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-                write_grd_file_from_xyz(grd_mean_distance_filename, xyz_mean_distance_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes)
+                write_grd_file_from_xyz(
+                        grd_mean_distance_filename, xyz_mean_distance_filename,
+                        grid_spacing, num_grid_longitudes, num_grid_latitudes,
+                        # Using original (grid-aligned) points so don't near nearest neighbour filtering...
+                        use_nearneighbor=False)
         
         if output_standard_deviation_distance:
             if feature_name is not None:
@@ -912,9 +964,11 @@ def write_proximity_data(
             write_xyz_file(xyz_standard_deviation_distance_filename, proximity_feature_data.get_std_dev_data())
             if output_grd_files:
                 grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-                write_grd_file_from_xyz(grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes)
-    
-    return 0 # Success
+                write_grd_file_from_xyz(
+                        grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename,
+                        grid_spacing, num_grid_longitudes, num_grid_latitudes,
+                        # Using original (grid-aligned) points so don't near nearest neighbour filtering...
+                        use_nearneighbor=False)
 
 
 if __name__ == '__main__':
@@ -958,188 +1012,202 @@ if __name__ == '__main__':
     python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid.nc -d -p -j -k -- input.xy output
      """
     
-    # The command-line parser.
-    parser = argparse.ArgumentParser(description = __description__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    
-    parser.add_argument('-r', '--rotation_filenames', type=str, nargs='+', required=True,
-            metavar='rotation_filename', help='One or more rotation files.')
-    parser.add_argument('-a', '--anchor', type=int, default=0,
-            dest='anchor_plate_id',
-            help='Anchor plate id used for reconstructing. Defaults to zero.')
-    parser.add_argument('-m', '--proximity_filenames', type=str, nargs='+', required=True,
-            metavar='proximity_filename',
-            help='One or more proximity files to test proximity to the ocean basin points. '
-            'These can be topological or non-topological.')
-    parser.add_argument('-n', '--non_topological_proximity_features', action='store_true',
-            help='Whether the proximity features specified with (-m/--proximity_filenames) are non-topological. '
-                'By default they are topological.')
-    parser.add_argument('-b', '--proximity_feature_types', type=str, nargs='+',
-            metavar='proximity_feature_type',
-            help='The feature type(s) to select proximity features. '
-                'The format should match the format of '
-                'http://www.gplates.org/docs/pygplates/generated/pygplates.FeatureType.html#pygplates.FeatureType.get_name . '
-                'For example, proximity to subduction zones is specified as SubductionZone (without the gpml: prefix). '
-                'Defaults to all proximity features (all resolved subsegments for topological features '
-                'or all proximity reconstructed feature geometries for non-topological features).')
-    parser.add_argument('-s', '--topological_reconstruction_filenames', type=str, nargs='+', required=True,
-            metavar='topological_reconstruction_filename',
-            help='The filenames of the topological files used to incrementally reconstruct the (paleo) ocean basin points.')
-    parser.add_argument('-x', '--max_topological_reconstruction_time', type=int, required=True,
-            metavar='max_topological_reconstruction_time',
-            help='The maximum (largest) time that the topological reconstruction files can reconstruct back to (in Ma). Value must be an integer.')
-    parser.add_argument('-g', '--age_grid_filename', type=str, required=True,
-            metavar='age_grid_filename',
-            help='The age grid filename used to find the begin age of each ocean basin point.')
-    parser.add_argument('-y', '--age_grid_paleo_time', type=int, required=True,
-            metavar='age_grid_paleo_time',
-            help='The time of the age grid in Ma. Value must be an integer.')
-    parser.add_argument('-t', '--time_increment', type=int, default=1,
-            help='The time increment in My. Value must be an integer. Defaults to 1 My.')
-    parser.add_argument('-q', '--max_distance', type=float,
-            help='The maximum distance in Kms. '
-                'If specified then distances between ocean basin points and proximity features exceeding this threshold will be ignored '
-                '(ocean basin point will not get output or will not contribute to mean / standar deviation), otherwise all distances are included.')
-    parser.add_argument('-c', '--num_cpus', type=int,
-            help='The number of CPUs to use for calculations. Defaults to all available CPUs.')
-    
-    parser.add_argument('-d', '--output_distance_with_time', action='store_true',
-            help='For each input point at each time during its lifetime write its distance to the nearest feature. '
-                'If no output options (excluding "output_all_proximity_distances") are specified then this one is used.')
-    parser.add_argument('-p', '--output_overriding_plate', action='store_true',
-            dest='output_overriding_plate_with_time',
-            help='For each input point at each time during its lifetime write the overriding plate ID of the nearest subduction zone. '
-                'Write the overriding plate ID to the fourth (w) column of the output if also writing distance (-d/--output_distance_with_time), '
-                'otherwise write to the third (z) column. '
-                'This option can only be specified if using topological features (ie, -n is not specified) '
-                'and subduction zones are the only feature type (ie, -b SubductionZone). '
-                'By default it is not written.')
-    parser.add_argument('-j', '--output_mean_distance', action='store_true',
-            help='For each input point write its mean distance to features averaged over its lifetime. '
-                'By default it is not written.')
-    parser.add_argument('-k', '--output_std_dev_distance', action='store_true',
-            help='For each input point write its standard deviation of distances to features averaged over its lifetime. '
-                'By default it is not written.')
-    parser.add_argument('-u', '--output_all_proximity_distances', action='store_true',
-            help='Also output distances to each feature (an extra distance for each feature name). '
-                'This outputs extra files with a feature name embedded in each filename. '
-                'This is in addition to outputting distances to nearest features. '
-                'By default only distances to the nearest features are written. '
-                'Can only be specified if "non_topological_proximity_features" is also specified '
-                '(ie, only applies to non-topological features).')
-    parser.add_argument('-w', '--output_grd_files', action='store_true',
-            help='Also generate a grd file for each xyz file. '
-                'By default only xyz files are written. '
-                'Can only be specified if "ocean_basin_points_filename" is not specified '
-                '(ie, ocean basin points must be on a uniform lon/lat grid).')
-    
-    parser.add_argument('-i', '--ocean_basin_grid_spacing', type=float,
-            help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
-                'The grid point latitudes/longitudes are offset by half the grid spacing '
-                '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
-                'Can only be specified if "ocean_basin_points_filename" is not specified. '
-                'Defaults to {0} degrees.'.format(
-                        DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
-    
-    def parse_unicode(value_string):
-        try:
-            # Filename uses the system encoding - decode from 'str' to 'unicode'.
-            filename = value_string.decode(sys.getfilesystemencoding())
-        except UnicodeDecodeError:
-            raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
+    try:
+        # The command-line parser.
+        parser = argparse.ArgumentParser(description = __description__, formatter_class=argparse.RawDescriptionHelpFormatter)
         
-        return filename
-    
-    parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
-            metavar='ocean_basin_points_filename',
-            help='Optional input xy file containing the ocean basin point locations. '
-                'If not specified then a uniform lon/lat grid of points is generated. '
-                'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_files" are not specified.')
-    
-    parser.add_argument('output_filename_prefix', type=parse_unicode,
-            metavar='output_filename_prefix',
-            help='The output xy filename prefix used in all output filenames.')
-    parser.add_argument('-e', '--output_filename_extension', type=str, default='xy',
-            metavar='output_filename_extension',
-            help='The output xy filename extension. Defaults to "xy".')
-    
-    # Parse command-line options.
-    args = parser.parse_args()
-    
-    # Default to 'output_distance_with_time' if no output options are specified.
-    if (not args.output_distance_with_time and
-        not args.output_overriding_plate_with_time and
-        not args.output_mean_distance and
-        not args.output_std_dev_distance):
-        args.output_distance_with_time = True
-    
-    if (args.output_all_proximity_distances and
-        not args.non_topological_proximity_features):
-        raise argparse.ArgumentTypeError(
-            "Can only specify 'output_all_proximity_distances' if 'non_topological_proximity_features' is also specified.")
-    
-    # Make sure user provides *topological* features and specifies subduction zone when
-    # they want to output overriding plate IDs.
-    if args.output_overriding_plate_with_time:
-        if args.non_topological_proximity_features:
+        parser.add_argument('-r', '--rotation_filenames', type=str, nargs='+', required=True,
+                metavar='rotation_filename', help='One or more rotation files.')
+        parser.add_argument('-a', '--anchor', type=int, default=0,
+                dest='anchor_plate_id',
+                help='Anchor plate id used for reconstructing. Defaults to zero.')
+        parser.add_argument('-m', '--proximity_filenames', type=str, nargs='+', required=True,
+                metavar='proximity_filename',
+                help='One or more proximity files to test proximity to the ocean basin points. '
+                'These can be topological or non-topological.')
+        parser.add_argument('-n', '--non_topological_proximity_features', action='store_true',
+                help='Whether the proximity features specified with (-m/--proximity_filenames) are non-topological. '
+                    'By default they are topological.')
+        parser.add_argument('-b', '--proximity_feature_types', type=str, nargs='+',
+                metavar='proximity_feature_type',
+                help='The feature type(s) to select proximity features. '
+                    'The format should match the format of '
+                    'http://www.gplates.org/docs/pygplates/generated/pygplates.FeatureType.html#pygplates.FeatureType.get_name . '
+                    'For example, proximity to subduction zones is specified as SubductionZone (without the gpml: prefix). '
+                    'Defaults to all proximity features (all resolved subsegments for topological features '
+                    'or all proximity reconstructed feature geometries for non-topological features).')
+        parser.add_argument('-s', '--topological_reconstruction_filenames', type=str, nargs='+', required=True,
+                metavar='topological_reconstruction_filename',
+                help='The filenames of the topological files used to incrementally reconstruct the (paleo) ocean basin points.')
+        parser.add_argument('-x', '--max_topological_reconstruction_time', type=int, required=True,
+                metavar='max_topological_reconstruction_time',
+                help='The maximum (largest) time that the topological reconstruction files can reconstruct back to (in Ma). Value must be an integer.')
+        parser.add_argument('-g', '--age_grid_filename', type=str, required=True,
+                metavar='age_grid_filename',
+                help='The age grid filename used to find the begin age of each ocean basin point.')
+        parser.add_argument('-y', '--age_grid_paleo_time', type=int, required=True,
+                metavar='age_grid_paleo_time',
+                help='The time of the age grid in Ma. Value must be an integer.')
+        parser.add_argument('-t', '--time_increment', type=int, default=1,
+                help='The time increment in My. Value must be an integer. Defaults to 1 My.')
+        parser.add_argument('-q', '--max_distance', type=float,
+                help='The maximum distance in Kms. '
+                    'If specified then distances between ocean basin points and proximity features exceeding this threshold will be ignored '
+                    '(ocean basin point will not get output or will not contribute to mean / standard deviation), otherwise all distances are included.')
+        parser.add_argument('-c', '--num_cpus', type=int,
+                help='The number of CPUs to use for calculations. Defaults to all available CPUs.')
+        
+        parser.add_argument('-d', '--output_distance_with_time', action='store_true',
+                help='For each input point at each time during its lifetime write its distance to the nearest feature. '
+                    'If no output options (excluding "output_all_proximity_distances") are specified then this one is used.')
+        parser.add_argument('-p', '--output_overriding_plate', action='store_true',
+                dest='output_overriding_plate_with_time',
+                help='For each input point at each time during its lifetime write the overriding plate ID of the nearest subduction zone. '
+                    'Write the overriding plate ID to the fourth (w) column of the output if also writing distance (-d/--output_distance_with_time), '
+                    'otherwise write to the third (z) column. '
+                    'This option can only be specified if using topological features (ie, -n is not specified) '
+                    'and subduction zones are the only feature type (ie, -b SubductionZone). '
+                    'By default it is not written.')
+        parser.add_argument('-j', '--output_mean_distance', action='store_true',
+                help='For each input point write its mean distance to features averaged over its lifetime. '
+                    'By default it is not written.')
+        parser.add_argument('-k', '--output_std_dev_distance', action='store_true',
+                help='For each input point write its standard deviation of distances to features averaged over its lifetime. '
+                    'By default it is not written.')
+        parser.add_argument('-u', '--output_all_proximity_distances', action='store_true',
+                help='Also output distances to each feature (an extra distance for each feature name). '
+                    'This outputs extra files with a feature name embedded in each filename. '
+                    'This is in addition to outputting distances to nearest features. '
+                    'By default only distances to the nearest features are written. '
+                    'Can only be specified if "non_topological_proximity_features" is also specified '
+                    '(ie, only applies to non-topological features).')
+        parser.add_argument('-w', '--output_grd_files', action='store_true',
+                help='Also generate a grd file for each xyz file. '
+                    'By default only xyz files are written. '
+                    'Can only be specified if "ocean_basin_points_filename" is not specified '
+                    '(ie, ocean basin points must be on a uniform lon/lat grid).')
+        
+        parser.add_argument('-i', '--ocean_basin_grid_spacing', type=float,
+                help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
+                    'The grid point latitudes/longitudes are offset by half the grid spacing '
+                    '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
+                    'Can only be specified if "ocean_basin_points_filename" is not specified. '
+                    'Defaults to {0} degrees.'.format(
+                            DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
+        
+        def parse_unicode(value_string):
+            try:
+                # Filename uses the system encoding - decode from 'str' to 'unicode'.
+                filename = value_string.decode(sys.getfilesystemencoding())
+            except UnicodeDecodeError:
+                raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
+            
+            return filename
+        
+        parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
+                metavar='ocean_basin_points_filename',
+                help='Optional input xy file containing the ocean basin point locations. '
+                    'If not specified then a uniform lon/lat grid of points is generated. '
+                    'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_files" are not specified.')
+        
+        parser.add_argument('output_filename_prefix', type=parse_unicode,
+                metavar='output_filename_prefix',
+                help='The output xy filename prefix used in all output filenames.')
+        parser.add_argument('-e', '--output_filename_extension', type=str, default='xy',
+                metavar='output_filename_extension',
+                help='The output xy filename extension. Defaults to "xy".')
+        
+        # Parse command-line options.
+        args = parser.parse_args()
+        
+        # Default to 'output_distance_with_time' if no output options are specified.
+        if (not args.output_distance_with_time and
+            not args.output_overriding_plate_with_time and
+            not args.output_mean_distance and
+            not args.output_std_dev_distance):
+            args.output_distance_with_time = True
+        
+        if (args.output_all_proximity_distances and
+            not args.non_topological_proximity_features):
             raise argparse.ArgumentTypeError(
-                "'output_overriding_plate' and 'non_topological_proximity_features' cannot both be specified.")
-        if (not args.proximity_feature_types or
-            len(args.proximity_feature_types) != 1 or
-            args.proximity_feature_types[0] != pygplates.FeatureType.gpml_subduction_zone.get_name()):
-            raise argparse.ArgumentTypeError(
-                "'proximity_feature_types' must specify only 'SubductionZone' when also specifying 'output_overriding_plate'.")
-    
-    if args.ocean_basin_points_filename is not None:
-        if args.ocean_basin_grid_spacing is not None:
-            raise argparse.ArgumentTypeError(
-                "'ocean_basin_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
-        if args.output_grd_files is not None:
-            raise argparse.ArgumentTypeError(
-                "'output_grd_files' and 'ocean_basin_points_filename' cannot both be specified.")
-    
-    # Get the input points.
-    if args.ocean_basin_points_filename is not None:
-        input_points = read_input_points(args.ocean_basin_points_filename)
-    else:
-        if args.ocean_basin_grid_spacing is None:
-            args.ocean_basin_grid_spacing = DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES
-        input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
-    
-    if input_points is None:
-        sys.exit(1)
-    
-    proximity_data = proximity(
-            input_points,
-            args.rotation_filenames,
-            args.proximity_filenames,
-            not args.non_topological_proximity_features, # proximity_features_are_topological
-            args.proximity_feature_types,
-            args.topological_reconstruction_filenames,
-            args.max_topological_reconstruction_time,
-            args.age_grid_filename,
-            args.age_grid_paleo_time,
-            args.time_increment,
-            args.output_distance_with_time,
-            args.output_overriding_plate_with_time,
-            args.output_mean_distance,
-            args.output_std_dev_distance,
-            args.output_all_proximity_distances,
-            args.num_cpus,
-            args.anchor_plate_id,
-            args.max_distance)
+                "Can only specify 'output_all_proximity_distances' if 'non_topological_proximity_features' is also specified.")
+        
+        # Make sure user provides *topological* features and specifies subduction zone when
+        # they want to output overriding plate IDs.
+        if args.output_overriding_plate_with_time:
+            if args.non_topological_proximity_features:
+                raise argparse.ArgumentTypeError(
+                    "'output_overriding_plate' and 'non_topological_proximity_features' cannot both be specified.")
+            if (not args.proximity_feature_types or
+                len(args.proximity_feature_types) != 1 or
+                args.proximity_feature_types[0] != pygplates.FeatureType.gpml_subduction_zone.get_name()):
+                raise argparse.ArgumentTypeError(
+                    "'proximity_feature_types' must specify only 'SubductionZone' when also specifying 'output_overriding_plate'.")
+        
+        if args.ocean_basin_points_filename is not None:
+            if args.ocean_basin_grid_spacing is not None:
+                raise argparse.ArgumentTypeError(
+                    "'ocean_basin_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
+            if args.output_grd_files is not None:
+                raise argparse.ArgumentTypeError(
+                    "'output_grd_files' and 'ocean_basin_points_filename' cannot both be specified.")
+        
+        # Get the input points.
+        if args.ocean_basin_points_filename is not None:
+            input_points = read_input_points(args.ocean_basin_points_filename)
+        else:
+            if args.ocean_basin_grid_spacing is None:
+                args.ocean_basin_grid_spacing = DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES
+            input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
+        
+        # Convert maximum proximity distance from Kms to radians (if it was specified).
+        if args.max_distance is None:
+            proximity_distance_threshold_radians = None
+        else:
+            proximity_distance_threshold_radians = args.max_distance / pygplates.Earth.mean_radius_in_kms
+            if proximity_distance_threshold_radians > 2 * math.pi:
+                # Exceeds circumference of Earth so no need for threshold.
+                proximity_distance_threshold_radians = None
+        
+        proximity_data = proximity_parallel(
+                input_points,
+                args.rotation_filenames,
+                args.proximity_filenames,
+                not args.non_topological_proximity_features, # proximity_features_are_topological
+                args.proximity_feature_types,
+                args.topological_reconstruction_filenames,
+                args.max_topological_reconstruction_time,
+                args.age_grid_filename,
+                args.age_grid_paleo_time,
+                args.time_increment,
+                args.output_distance_with_time,
+                args.output_overriding_plate_with_time,
+                args.output_mean_distance,
+                args.output_std_dev_distance,
+                args.output_all_proximity_distances,
+                args.anchor_plate_id,
+                proximity_distance_threshold_radians,
+                args.num_cpus)
 
-    if proximity_data is None:
+        if proximity_data is None:
+            raise ValueError('All ocean basin points are outside the age grid (in masked regions).')
+        
+        write_proximity_data(
+                proximity_data,
+                args.output_filename_prefix,
+                args.output_filename_extension,
+                args.time_increment,
+                args.output_distance_with_time,
+                args.output_overriding_plate_with_time,
+                args.output_mean_distance,
+                args.output_std_dev_distance,
+                (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
+        
+        sys.exit(0)
+    
+    except Exception as exc:
+        print('ERROR: {0}'.format(exc), file=sys.stderr)
+        # Uncomment this to print traceback to location of raised exception.
+        #traceback.print_exc()
+        
         sys.exit(1)
-    
-    write_proximity_data(
-            proximity_data,
-            args.output_filename_prefix,
-            args.output_filename_extension,
-            args.time_increment,
-            args.output_distance_with_time,
-            args.output_overriding_plate_with_time,
-            args.output_mean_distance,
-            args.output_std_dev_distance,
-            (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
-    
-    sys.exit(0)

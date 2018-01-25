@@ -32,7 +32,7 @@ def generate_predicted_sedimentation_grid(
             'python',
             predict_sedimentation_script,
             '-d',
-            '{0}/mean_distance_1d_{1}.grd'.format(distance_grid_dir, time),
+            '{0}/mean_distance_1.0d_{1}.grd'.format(distance_grid_dir, time),
             '-g',
             '{0}/agegrid_{1}.nc'.format(age_grid_dir, time),
             '-i',
@@ -149,14 +149,14 @@ if __name__ == '__main__':
     predict_sedimentation_script = 'predict_sedimentation_rate.py'
     #scale_sedimentation_rate = 1.0  # Keep predicted rate in (cm/Ky).
     scale_sedimentation_rate = 10.0  # Scale predicted rate (cm/Ky) to (m/My).
-    mean_age = 60.19000622
-    mean_distance = 2058.25803042
-    variance_age = 1.89421205e+03
-    variance_distance = 2.96811661e+06
+    mean_age = 60.16231293
+    mean_distance = 4009.87710251
+    variance_age = 1.89252867e+03
+    variance_distance = 2.03712701e+07
     max_age = 196.88598633
-    max_distance = 6855.48388672
+    max_distance = 21834.5585938
     age_distance_polynomial_coefficients = [
-            -1.3607332291017404 , -0.37400809, -0.5160163 ,  0.42959   , -0.07323361, 0.60509602, -0.12621648, -0.01720338,  0.14899377, -0.29455261]
+            -1.5261321944119561, -0.32642545, -0.80287186,  0.42439004, -0.20645698, 1.04270917, -0.09905988, -0.01516238, -0.01400988, -0.26872899]
     
     output_dir = 'sedimentation_output/predicted_rate'
     
@@ -206,14 +206,14 @@ if __name__ == '__main__':
     #
     predict_sedimentation_script = 'predict_sediment_thickness.py'
     scale_sedimentation_rate = 1.0  # No scaling - we're calculating rate (m/My) from thickness (m) and age (My).
-    mean_age = 60.19000622
-    mean_distance = 2058.25803042
-    variance_age = 1.89421205e+03
-    variance_distance = 2.96811661e+06
+    mean_age = 60.16231293
+    mean_distance = 4009.87710251
+    variance_age = 1.89252867e+03
+    variance_distance = 2.03712701e+07
     max_age = 196.88598633
-    max_distance = 6855.48388672
+    max_distance = 21834.5585938
     age_distance_polynomial_coefficients = [
-            5.0517840448654425, 0.35892409, -0.39697653, -0.22518593, -0.03911694, 0.57485024,  0.06178908, -0.04514372,  0.17936484, -0.29459847]
+            4.9119609829784885, 0.44863772, -0.67296827, -0.21389457, -0.14731915, 0.94656207,  0.08893298, -0.03818935, -0.0113388 , -0.24183922]
     
     output_dir = 'sedimentation_output/predicted_thickness'
 

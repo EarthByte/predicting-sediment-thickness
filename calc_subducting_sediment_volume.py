@@ -39,34 +39,28 @@ def calc_subducting_sediment_volume(time):
     
     subduction_points = [pygplates.PointOnSphere(data[1], data[0]) for data in subduction_convergence_data]
     
+    # Sample the sediment thickness raster at the subduction points.
     sediment_thicknesses = raster_query.query_raster_at_points(
             sediment_thickness_grid_filename,
             subduction_points,
             search_radius_radians,
             smoothing_radius_radians)
     
-    #sediment_thickness_data = raster_query.query_raster_with_resolved_topologies(
-    #        sediment_thickness_grid_filename,
-    #        rotation_model,
-    #        time,
-    #        topology_features,
-    #        tessellation_threshold_radians,
-    #        search_radius_radians,
-    #        smoothing_radius_radians,
-    #        [pygplates.FeatureType.gpml_subduction_zone])
+    subducting_lon_lat_thickness_velocity_volume_list = []
     
+    # Iterate over subduction points/thicknesses and calculate statistics (including subducting volume).
+    weighted_mean_subducting_sed_thickness = 0.0
+    weighted_second_moment_subducting_sed_thickness = 0.0
     total_subducting_length_metres = 0.0
     total_subducting_sediment_volume_metres_3_per_year = 0.0
-    #count = 0
     for subduction_point_index, sediment_thickness in enumerate(sediment_thicknesses):
         if math.isnan(sediment_thickness):
-            #count += 1
             continue
         
         subduction_convergence_item = subduction_convergence_data[subduction_point_index]
         
-        #lon = subduction_convergence_item[0]
-        #lat = subduction_convergence_item[1]
+        subducting_lon = subduction_convergence_item[0]
+        subducting_lat = subduction_convergence_item[1]
         convergence_velocity_magnitude_cm_per_yr = subduction_convergence_item[2]
         convergence_obliquity_degrees = subduction_convergence_item[3]
         #absolute_velocity_magnitude = subduction_convergence_item[4]
@@ -79,22 +73,45 @@ def calc_subducting_sediment_volume(time):
         subducting_length_metres = (
             math.radians(subducting_length_degrees) * 1e3 * pygplates.Earth.mean_radius_in_kms)
         
-        total_subducting_length_metres += subducting_length_metres
+        weighted_mean_subducting_sed_thickness += subducting_length_metres * sediment_thickness
+        weighted_second_moment_subducting_sed_thickness += subducting_length_metres * sediment_thickness * sediment_thickness
         
+        total_subducting_length_metres += subducting_length_metres
         convergence_normal_velocity_metres_per_year = (
             # 1e-2 converts cm/y to m/y...
             1e-2 * math.fabs(convergence_velocity_magnitude_cm_per_yr) *
             # Negative convergence handled by cos(obliquity_angle)...
             math.cos(math.radians(convergence_obliquity_degrees)))
-        
-        total_subducting_sediment_volume_metres_3_per_year += (
+        subducting_sediment_volume_metres_3_per_year = (
                 sediment_thickness * subducting_length_metres * convergence_normal_velocity_metres_per_year)
+        total_subducting_sediment_volume_metres_3_per_year += subducting_sediment_volume_metres_3_per_year
+        
+        subducting_lon_lat_thickness_velocity_volume_list.append((
+                subducting_lon,
+                subducting_lat,
+                sediment_thickness,
+                subducting_sediment_volume_metres_3_per_year / subducting_length_metres,
+                # cms/year ...
+                1e2 * convergence_normal_velocity_metres_per_year))
     
-    #print('Count', count, len(sediment_thicknesses))
+    # mean = M = sum(Ci * Xi) / sum(Ci)
+    # std_dev  = sqrt[sum(Ci * (Xi - M)^2) / sum(Ci)]
+    #          = sqrt[(sum(Ci * Xi^2) - 2 * M * sum(Ci * Xi) + M^2 * sum(Ci)) / sum(Ci)]
+    #          = sqrt[(sum(Ci * Xi^2) - 2 * M * M * sum(Ci) + M^2 * sum(Ci)) / sum(Ci)]
+    #          = sqrt[(sum(Ci * Xi^2) - M^2 * sum(Ci)) / sum(Ci)]
+    #          = sqrt[(sum(Ci * Xi^2) / sum(Ci) - M^2]
+    mean_sed_thickness = weighted_mean_subducting_sed_thickness / total_subducting_length_metres
+    variance_sed_thickness = (
+            (weighted_second_moment_subducting_sed_thickness / total_subducting_length_metres) -
+            mean_sed_thickness * mean_sed_thickness)
+    std_dev_sed_thickness = math.sqrt(variance_sed_thickness) if variance_sed_thickness > 0.0 else 0.0
     
-    #mean_sediment_thickness = sum(sediment_thicknesses) / len(sediment_thicknesses)
-    
-    return time, total_subducting_length_metres, total_subducting_sediment_volume_metres_3_per_year
+    return (time,
+            subducting_lon_lat_thickness_velocity_volume_list,
+            mean_sed_thickness,
+            std_dev_sed_thickness,
+            total_subducting_length_metres,
+            total_subducting_sediment_volume_metres_3_per_year)
 
 
 # Wraps around 'calc_subducting_sediment_volume()' so can be used by multiprocessing.Pool.map()
@@ -106,7 +123,6 @@ def calc_subducting_sediment_volume_parallel_pool_function(args):
         pass
 
 
-
 if __name__ == '__main__':
     
     #calc_subducting_sediment_volume(0)
@@ -114,7 +130,7 @@ if __name__ == '__main__':
     
     try:
         num_cpus = multiprocessing.cpu_count()
-        #num_cpus = 10
+        num_cpus = 10
     except NotImplementedError:
         num_cpus = 1
     
@@ -137,12 +153,61 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         sys.exit(1)
     
-    print('{0:<10} {1:<40} {2:<40}'.format('Age(Ma)', 'Total subducting volume (m^3/y)', 'Subducting volume per unit metre (m^2/y)'))
+    # Print the header of the statistics table.
+    print('{0:<10} {1:<40} {2:<40} {3:<40} {4:<40}'.format(
+            'Age(Ma)',
+            'Mean subducting thickness (m)',
+            'Std dev subducting thickness (m)',
+            'Total subducting volume (m^3/y)',
+            'Subducting volume per unit metre (m^2/y)'))
     
-    for time, total_subducting_length_metres, total_subducting_sediment_volume_metres_3_per_year in sorted(subduction_datas):
-        print('{0:<10.0f} {1:<40.2f} {2:<40.2f}'.format(
+    subducting_thickness_features = []
+    
+    # Iterate over the statistics for each time (each time comes from a separate multiprocessing pool).
+    for (time,
+        subducting_lon_lat_thickness_velocity_volume_list,
+        mean_sed_thickness,
+        std_dev_sed_thickness,
+        total_subducting_length_metres,
+        total_subducting_sediment_volume_metres_3_per_year) in sorted(subduction_datas):
+        
+        # Print the statistics for the current time.
+        print('{0:<10.0f} {1:<40.2f} {2:<40.2f} {3:<40.2f} {4:<40.2f}'.format(
                 time,
+                mean_sed_thickness,
+                std_dev_sed_thickness,
                 total_subducting_sediment_volume_metres_3_per_year,
                 total_subducting_sediment_volume_metres_3_per_year / total_subducting_length_metres))
+        
+        # Gather the subducting thickness points.
+        subducting_points = []
+        subducting_sed_thicknesses = []
+        subducting_sediment_volumes_metres_3_per_year_per_metre = []
+        convergence_normal_velocities_cms_per_year = []
+        for (
+            lon,
+            lat,
+            sed_thickness,
+            subducting_sediment_volume_metres_3_per_year_per_metre,
+            convergence_normal_velocity_cms_per_year) in subducting_lon_lat_thickness_velocity_volume_list:
+            
+            subducting_points.append(pygplates.PointOnSphere(lat, lon))
+            subducting_sed_thicknesses.append(sed_thickness)
+            subducting_sediment_volumes_metres_3_per_year_per_metre.append(subducting_sediment_volume_metres_3_per_year_per_metre)
+            convergence_normal_velocities_cms_per_year.append(convergence_normal_velocity_cms_per_year)
+        
+        # Create a scalar coverage feature to display sediment thicknesses in GPlates.
+        subducting_thickness_feature = pygplates.Feature()
+        subducting_thickness_feature.set_geometry((
+                pygplates.MultiPointOnSphere(subducting_points),
+                {pygplates.ScalarType.create_gpml('subducting_sed_thick') : subducting_sed_thicknesses,
+                pygplates.ScalarType.create_gpml('sed_volume_m_3_per_year_per_m') : subducting_sediment_volumes_metres_3_per_year_per_metre,
+                pygplates.ScalarType.create_gpml('conv_normal_vel_cms_year') : convergence_normal_velocities_cms_per_year}))
+        # Only want to display this feature at 'time' Ma.
+        subducting_thickness_feature.set_valid_time(time + 0.5, time - 0.5)
+        
+        subducting_thickness_features.append(subducting_thickness_feature)
+    
+    pygplates.FeatureCollection(subducting_thickness_features).write('subducting_thicknesses.gpmlz')
     
     sys.exit(0)

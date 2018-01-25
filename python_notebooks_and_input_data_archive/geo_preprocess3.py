@@ -1,9 +1,19 @@
 """ Geo Analysis Preprocessing."""
 import numpy as np
 import scipy
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 from sklearn.model_selection._split import _BaseKFold
+from matplotlib.colors import LightSource
+from matplotlib import cm
+from matplotlib import rc
+from mpl_toolkits.mplot3d.axes3d import Axes3D
+from mpl_toolkits.mplot3d import proj3d
+
+
+CMAP = 'nipy_spectral'
+
 
 class LongFold(_BaseKFold):
     """
@@ -197,8 +207,22 @@ def draw_global(c, title, longitude, latitude, vmin=2.4, vmax=9,
 
 def two_feature_analysis(data, regressor, feature1_ind, feature2_ind,
                          feature1_name, feature2_name, y_name,
+                         xticks,yticks,zticks,cbar_ticks,ylabels,
+                         cbar_label,
                          lon_ind=0, lat_ind=1, y_ind=-1, query_size=10,
+                         lightsource_x=270, lightsource_y=45,
+                         fig_size_x=10,fig_size_y=10,
+                         elev=20,azmin=34,
+                         x_axis_scale=1,
+                         y_axis_scale=1,
+                         z_axis_scale=1.4,
+                         vmin=-4,vmax=2,
+                         plot_name='3D_plot.pdf'
                          ):
+    # set font to helvetica
+    rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+    rc('text', usetex=True)
+
     # set up variables
     X = data[:, :y_ind]
     log_thick = np.log(data[:, y_ind])
@@ -224,16 +248,69 @@ def two_feature_analysis(data, regressor, feature1_ind, feature2_ind,
     query = np.vstack((xeval.ravel(), yeval.ravel())).T
     fea_pred = model.predict(query)
     fea_pred_arr = fea_pred.reshape(query_size, query_size)
+    
+     # Values for thickness                          cmap=CMAP, lw=0.1, vmin=2, vmax=10)
 
     fig = plt.figure()
+    #fig.set_size_inches((fig_size_x,fig_size_y))
     ax = fig.gca(projection='3d')
+
+    # scale axes
+    x_scale=x_axis_scale
+    y_scale=y_axis_scale
+    z_scale=z_axis_scale
+
+    scale=np.diag([x_scale, y_scale, z_scale, 1.0])
+    scale=scale*(1.0/scale.max())
+    scale[3,3]=1.0
+
+    def short_proj():
+      return np.dot(Axes3D.get_proj(ax), scale)
+
+    ax.get_proj = short_proj
+
+    # add lightsource
+    light = LightSource(lightsource_x, lightsource_y)
+    illuminated_surface = light.shade(fea_pred_arr, cmap = plt.get_cmap(CMAP),blend_mode='soft')
+    # make the plot surface
     surf = ax.plot_surface(xeval, yeval, fea_pred_arr, rstride=1, cstride=1,
-                           cmap='nipy_spectral', lw=0.1, vmin=2, vmax=10)
-    ax.set_xlabel(feature1_name)
-    ax.set_ylabel(feature2_name)
-    ax.set_zlabel(y_name)
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    plt.title('Regression Surface')
-    fig.savefig('3d_plot.png',bbox_inches='tight',dpi=600)
-    plt.show()
+                           cmap=CMAP, lw=0.1, vmin=vmin, vmax=vmax
+                           )
+
+    fig.tight_layout()
+    # axis labels
+    fs = 10
+    lp = 15
+    ax.set_xlabel(feature1_name,fontsize=fs,ha='center',labelpad=lp)
+    ax.set_ylabel(feature2_name,fontsize=fs,ha='center',labelpad=lp)
+    ax.set_zlabel(y_name,fontsize=fs,ha='center',va='baseline',labelpad=0)
+    # axis ticks
+    ax.set_xticks(xticks)
+    ax.set_yticks(yticks)
+    ax.set_zticks(zticks)
+    # axis tick labels
+    fs = 10
+    ax.set_xticklabels(xticks,fontsize=fs)
+    ax.set_yticklabels(ylabels,fontsize=fs)
+    ax.set_zticklabels(zticks,fontsize=fs)
+    ax.tick_params(axis='both', which='major', pad=5)
+    ax.zaxis._axinfo['label']['space_factor'] = 2.8
+    ax.tick_params(axis='z', which='major', pad=0)
+    # axis space factors
+    sf = 3
+    ax.yaxis._axinfo['label']['space_factor'] = sf
+    ax.xaxis._axinfo['label']['space_factor'] = sf
+    ax.zaxis._axinfo['label']['space_factor'] = 0
+    # color bar
+    m = cm.ScalarMappable(cmap=surf.cmap, norm=surf.norm)
+    m.set_array(fea_pred_arr)
+    cbar = plt.colorbar(m, shrink=0.5, aspect=15, orientation='horizontal',pad=0.05)
+    cbar.set_ticks(cbar_ticks)
+    cbar.set_ticklabels(cbar_ticks)
+    cbar.set_label(cbar_label)
+    #cbar.ax.set_yticklabels(cbar_ticks,fontsize=fs)
+    #cbar.ax.tick_params(labelsize=10) 
+    #plt.title('Regression Surface')
+    ax.view_init(elev=1.0*elev, azim=azmin)
+    plt.savefig(plot_name,bbox_inches='tight',dpi=600,format='pdf')
 
