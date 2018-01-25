@@ -11,8 +11,8 @@ alldata_input_filename = 'alldata_orig'
 alldata_output_filename = 'alldata'
 
 mean_distance_grid_base_filename = 'mean_distance_1.0d_0'
-mean_distance_grid_input_filename = mean_distance_grid_base_filename + '.grd'
-mean_distance_grid_output_filename = mean_distance_grid_base_filename + '_-180_180_-70_80.grd'
+mean_distance_grid_input_filename = mean_distance_grid_base_filename + '.nc'
+mean_distance_grid_output_filename = mean_distance_grid_base_filename + '_-180_180_-70_80.nc'
 
 
 def read_alldata_file(alldata_filename):
@@ -45,13 +45,13 @@ def write_alldata_file(alldata_filename, alldata):
 
 
 # Restrict latitude range to -70/80 because that corresponds to the extent of the sediment thickness grid data.
-# Also using "-T" to convert from pixel to grid registration since distance grids are in pixel registration
+# Note: We don't need to use "-T" to convert from pixel to grid registration since distance grids are already in grid registration
 # (grid registration gives us pixel values at 1 degree integer lon/lat locations used by other data in 'alldata').
-call_system_command(["gmt", "grdsample", "-I1", "-fg", "-T", "-R-180/180/-70/80", mean_distance_grid_input_filename, "-G{0}".format(mean_distance_grid_output_filename)])
+call_system_command(["gmt", "grdsample", "-I1", "-fg", "-R-180/180/-70/80", mean_distance_grid_input_filename, "-G{0}".format(mean_distance_grid_output_filename)])
 
 # Convert grd to xyz.
 mean_distance_output = call_system_command(
-        ["gmt", "grd2xyz", mean_distance_grid_output_filename],
+        ["gmt", "grd2xyz", "-fg", mean_distance_grid_output_filename],
         return_stdout=True)
 
 mean_distance_data = []

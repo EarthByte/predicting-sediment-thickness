@@ -158,8 +158,7 @@ def write_xyz_file(output_filename, output_data):
 def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes):
     
     # The command-line strings to execute GMT 'nearneighbor'.
-    # For example "nearneighbor output_mean_distance.xy -R-180/180/-90/90 -I1 -N4 -S1d -Goutput_mean_distance.grd=cf"
-    # ...with "=cf" generating NetCDF-3, instead of NetCDF-4, files (GPlates 2.0 can only load NetCDF-3).
+    # For example "nearneighbor output_mean_distance.xy -R-180/180/-90/90 -I1 -N4 -S1d -Goutput_mean_distance.nc".
     gmt_command_line = [
             "gmt",
             "nearneighbor",
@@ -171,7 +170,7 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
             # Use GMT gridline registration since our input point grid has data points on the grid lines.
             # Gridline registration is the default so we don't need to force pixel registration...
             #"-r", # Force pixel registration since data points are at centre of cells.
-            "-G{0}=cf".format(grd_filename.encode(sys.getfilesystemencoding()))]
+            "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
     call_system_command(gmt_command_line)
 
 
@@ -379,9 +378,9 @@ def write_sediment_data(
     if output_grd_file:
         grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_file
         
-        average_sedimentation_rate_grd_filename = u'{0}_{1}.grd'.format(
+        average_sedimentation_rate_grd_filename = u'{0}_{1}.nc'.format(
                 output_filename_prefix, average_sedimentation_rate_suffix)
-        sediment_thickness_grd_filename = u'{0}_{1}.grd'.format(
+        sediment_thickness_grd_filename = u'{0}_{1}.nc'.format(
                 output_filename_prefix, sediment_thickness_suffix)
         
         write_grd_file_from_xyz(

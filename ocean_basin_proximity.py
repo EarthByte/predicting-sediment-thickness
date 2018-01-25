@@ -82,32 +82,32 @@ def generate_input_points_grid(grid_spacing_degrees):
     
     input_points = []
     
-    # # Data points start *on* dateline (-180).
-    # # If 180 is an integer multiple of grid spacing then final longitude also lands on dateline (+180).
-    # num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
-    # num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
-    # for lat_index in range(num_latitudes):
-    #     lat = -90 + lat_index * grid_spacing_degrees
-    #     
-    #     for lon_index in range(num_longitudes):
-    #         lon = -180 + lon_index * grid_spacing_degrees
-    #         
-    #         input_points.append((lon, lat))
-
-    num_latitudes = int(math.floor(180.0 / grid_spacing_degrees))
-    num_longitudes = int(math.floor(360.0 / grid_spacing_degrees))
+    # Data points start *on* dateline (-180).
+    # If 180 is an integer multiple of grid spacing then final longitude also lands on dateline (+180).
+    num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
+    num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
     for lat_index in range(num_latitudes):
-        # The 0.5 puts the point in the centre of the grid pixel.
-        # This also avoids sampling right on the poles.
-        lat = -90 + (lat_index + 0.5) * grid_spacing_degrees
+        lat = -90 + lat_index * grid_spacing_degrees
         
         for lon_index in range(num_longitudes):
-            # The 0.5 puts the point in the centre of the grid pixel.
-            # This also avoids sampling right on the dateline where there might be
-            # age grid or static polygon artifacts.
-            lon = -180 + (lon_index + 0.5) * grid_spacing_degrees
+            lon = -180 + lon_index * grid_spacing_degrees
             
             input_points.append((lon, lat))
+
+    # num_latitudes = int(math.floor(180.0 / grid_spacing_degrees))
+    # num_longitudes = int(math.floor(360.0 / grid_spacing_degrees))
+    # for lat_index in range(num_latitudes):
+    #     # The 0.5 puts the point in the centre of the grid pixel.
+    #     # This also avoids sampling right on the poles.
+    #     lat = -90 + (lat_index + 0.5) * grid_spacing_degrees
+    #     
+    #     for lon_index in range(num_longitudes):
+    #         # The 0.5 puts the point in the centre of the grid pixel.
+    #         # This also avoids sampling right on the dateline where there might be
+    #         # age grid or static polygon artifacts.
+    #         lon = -180 + (lon_index + 0.5) * grid_spacing_degrees
+    #         
+    #         input_points.append((lon, lat))
     
     return (input_points, num_longitudes, num_latitudes)
 
@@ -297,7 +297,7 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
     
     if use_nearneighbor:
         # The command-line strings to execute GMT 'nearneighbor'.
-        # For example "nearneighbor output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -N4 -S1d -Goutput_mean_distance.grd".
+        # For example "nearneighbor output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -N4 -S1d -Goutput_mean_distance.nc".
         gmt_command_line = [
                 "gmt",
                 "nearneighbor",
@@ -305,9 +305,9 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 "-N4/1", # Divide search radius into 4 sectors but only require a value in 1 sector.
                 "-S{0}d".format(0.7 * grid_spacing),
                 "-I{0}".format(grid_spacing),
-                # # Use GMT gridline registration since our input point grid has data points on the grid lines.
-                # # Gridline registration is the default so we don't need to force pixel registration...
-                "-r", # Force pixel registration since data points are at centre of cells.
+                # Use GMT gridline registration since our input point grid has data points on the grid lines.
+                # Gridline registration is the default so we don't need to force pixel registration...
+                # "-r", # Force pixel registration since data points are at centre of cells.
                 "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
                 #"-R{0}/{1}/{2}/{3}".format(
                 #        -180 + 0.5 * grid_spacing,
@@ -317,14 +317,16 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
     else:
         # The command-line strings to execute GMT 'xyz2grd'.
-        # For example "xyz2grd output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -Goutput_mean_distance.grd".
+        # For example "xyz2grd output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -Goutput_mean_distance.nc".
         gmt_command_line = [
                 "gmt",
                 "xyz2grd",
                 xyz_filename.encode(sys.getfilesystemencoding()),
                 "-I{0}".format(grid_spacing),
+                # Use GMT gridline registration since our input point grid has data points on the grid lines.
+                # Gridline registration is the default so we don't need to force pixel registration...
+                # "-r", # Force pixel registration since data points are at centre of cells.
                 "-R-180/180/-90/90",
-                "-r", # Force pixel registration since data points are at centre of cells.
                 #"-R{0}/{1}/{2}/{3}".format(
                 #        -180 + 0.5 * grid_spacing,
                 #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
@@ -603,6 +605,7 @@ def proximity(
                     for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
 
             topology_obstacle_feature_types = [pygplates.FeatureType.gpml_mid_ocean_ridge, pygplates.FeatureType.gpml_subduction_zone]
+            #topology_obstacle_feature_types = None
             topology_obstacle_resolved_topologies = []
             topology_obstacle_shared_boundary_sections = []
             pygplates.resolve_topologies(topology_reconstruction_features, rotation_model, topology_obstacle_resolved_topologies, time, topology_obstacle_shared_boundary_sections)
@@ -917,11 +920,11 @@ def write_proximity_data(
                 if feature_name is not None:
                     xyz_filename = u'{0}_{1}_{2:0.2f}.{3}'.format(output_filename_prefix, feature_name.decode('utf-8'), time, output_filename_extension)
                     if output_grd_files:
-                        grd_filename = u'{0}_{1}_{2:0.2f}.grd'.format(output_filename_prefix, feature_name.decode('utf-8'), time)
+                        grd_filename = u'{0}_{1}_{2:0.2f}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'), time)
                 else:
                     xyz_filename = u'{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
                     if output_grd_files:
-                        grd_filename = u'{0}_{1:0.2f}.grd'.format(output_filename_prefix, time)
+                        grd_filename = u'{0}_{1:0.2f}.nc'.format(output_filename_prefix, time)
                 
                 write_xyz_file(xyz_filename, proximity_feature_time_data)
                 if output_grd_files:
@@ -936,11 +939,11 @@ def write_proximity_data(
             if feature_name is not None:
                 xyz_mean_distance_filename = u'{0}_mean_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
                 if output_grd_files:
-                    grd_mean_distance_filename = u'{0}_mean_distance_{1}.grd'.format(output_filename_prefix, feature_name.decode('utf-8'))
+                    grd_mean_distance_filename = u'{0}_mean_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
             else:
                 xyz_mean_distance_filename = u'{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
                 if output_grd_files:
-                    grd_mean_distance_filename = u'{0}_mean_distance.grd'.format(output_filename_prefix)
+                    grd_mean_distance_filename = u'{0}_mean_distance.nc'.format(output_filename_prefix)
                 
             write_xyz_file(xyz_mean_distance_filename, proximity_feature_data.get_mean_data())
             if output_grd_files:
@@ -955,11 +958,11 @@ def write_proximity_data(
             if feature_name is not None:
                 xyz_standard_deviation_distance_filename = u'{0}_std_dev_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
                 if output_grd_files:
-                    grd_standard_deviation_distance_filename = u'{0}_std_dev_distance_{1}.grd'.format(output_filename_prefix, feature_name.decode('utf-8'))
+                    grd_standard_deviation_distance_filename = u'{0}_std_dev_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
             else:
                 xyz_standard_deviation_distance_filename = u'{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
                 if output_grd_files:
-                    grd_standard_deviation_distance_filename = u'{0}_std_dev_distance.grd'.format(output_filename_prefix)
+                    grd_standard_deviation_distance_filename = u'{0}_std_dev_distance.nc'.format(output_filename_prefix)
                 
             write_xyz_file(xyz_standard_deviation_distance_filename, proximity_feature_data.get_std_dev_data())
             if output_grd_files:

@@ -5,8 +5,13 @@ import os
 import sys
 
 age_grid_dir = 'E:/Users/John/Downloads/GPlates/data/rasters/Muller_etal_2016_AREPS_Agegrids/netCDF_0-230Ma'
-#age_grid_dir = 'D:/Users/john/Downloads/gplates/data/Muller_etal_2016_AREPS_Agegrids/netCDF_0-230Ma'
-distance_grid_dir = 'distances_1d'
+age_base_name = 'agegrid'
+
+distance_grid_dir = 'E:/Users/John/Downloads/GPlates/data/PythonWorkflows/SedimentationRate/shortest_path_distances_1d'
+distance_base_name = 'mean_distance_1.0d'
+
+output_base_dir = 'E:/Users/John/Downloads/GPlates/data/PythonWorkflows/SedimentationRate'
+sediment_output_sub_dir = 'sedimentation_output'
 
 grid_spacing = 0.2
 
@@ -32,9 +37,9 @@ def generate_predicted_sedimentation_grid(
             'python',
             predict_sedimentation_script,
             '-d',
-            '{0}/mean_distance_1.0d_{1}.grd'.format(distance_grid_dir, time),
+            '{0}/{1}_{2}.nc'.format(distance_grid_dir, distance_base_name, time),
             '-g',
-            '{0}/agegrid_{1}.nc'.format(age_grid_dir, time),
+            '{0}/{1}_{2}.nc'.format(age_grid_dir, age_base_name, time),
             '-i',
             str(grid_spacing),
             '-w',
@@ -67,7 +72,7 @@ def generate_predicted_sedimentation_grid(
     
     # Rename the average sedimentation rate and sediment thicknesses files so that 'time' is at the
     # end of the base filename - this way we can import them as time-dependent raster into GPlates.
-    for ext in ('xy', 'grd'):
+    for ext in ('xy', 'nc'):
         
         src_sed_rate = '{0}/sed_{1}_{2}_sed_rate.{3}'.format(output_dir, grid_spacing, time, ext)
         dst_sed_rate = '{0}/sed_rate_{1}d_{2}.{3}'.format(output_dir, grid_spacing, time, ext)
@@ -91,6 +96,28 @@ def generate_predicted_sedimentation_grid_parallel_pool_function(args):
         return generate_predicted_sedimentation_grid(*args)
     except KeyboardInterrupt:
         pass
+
+
+def low_priority():
+    """ Set the priority of the process to below-normal."""
+
+    import sys
+    try:
+        sys.getwindowsversion()
+    except AttributeError:
+        isWindows = False
+    else:
+        isWindows = True
+
+    if isWindows:
+        import psutil
+        
+        p = psutil.Process()
+        p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    else:
+        import os
+
+        os.nice(1)
 
 
 
@@ -149,21 +176,21 @@ if __name__ == '__main__':
     predict_sedimentation_script = 'predict_sedimentation_rate.py'
     #scale_sedimentation_rate = 1.0  # Keep predicted rate in (cm/Ky).
     scale_sedimentation_rate = 10.0  # Scale predicted rate (cm/Ky) to (m/My).
-    mean_age = 60.16231293
-    mean_distance = 4009.87710251
-    variance_age = 1.89252867e+03
-    variance_distance = 2.03712701e+07
+    mean_age = 60.1842831
+    mean_distance = 1878.23124959
+    variance_age = 1893.88287649
+    variance_distance = 1159561.12717194
     max_age = 196.88598633
-    max_distance = 21834.5585938
+    max_distance = 3000.
     age_distance_polynomial_coefficients = [
-            -1.5261321944119561, -0.32642545, -0.80287186,  0.42439004, -0.20645698, 1.04270917, -0.09905988, -0.01516238, -0.01400988, -0.26872899]
+            -1.0051420927669603, -0.30916322, -0.19923406,  0.38827883, -0.12533169, 0.        , -0.11374372,  0.0297582 , -0.02391933, -0.36943835]
     
-    output_dir = 'sedimentation_output/predicted_rate'
+    output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_rate'
     
     print('Generating predicted sedimentation rate grids...')
     
     # Split the workload across the CPUs.
-    pool = multiprocessing.Pool(num_cpus)
+    pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
     pool_map_async_result = pool.map_async(
             generate_predicted_sedimentation_grid_parallel_pool_function,
             (
@@ -206,21 +233,21 @@ if __name__ == '__main__':
     #
     predict_sedimentation_script = 'predict_sediment_thickness.py'
     scale_sedimentation_rate = 1.0  # No scaling - we're calculating rate (m/My) from thickness (m) and age (My).
-    mean_age = 60.16231293
-    mean_distance = 4009.87710251
-    variance_age = 1.89252867e+03
-    variance_distance = 2.03712701e+07
+    mean_age = 60.1842831
+    mean_distance = 1878.23124959
+    variance_age = 1893.88287649
+    variance_distance = 1159561.12717194
     max_age = 196.88598633
-    max_distance = 21834.5585938
+    max_distance = 3000.
     age_distance_polynomial_coefficients = [
-            4.9119609829784885, 0.44863772, -0.67296827, -0.21389457, -0.14731915, 0.94656207,  0.08893298, -0.03818935, -0.0113388 , -0.24183922]
+            5.3732890044120172, 0.44092176, -0.15401756, -0.23843168, -0.06208386, 0.00957594,  0.07160925,  0.00344379,  0.        , -0.32534525]
     
-    output_dir = 'sedimentation_output/predicted_thickness'
+    output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_thickness'
 
     print('Generating predicted sediment thickness grids...')
     
     # Split the workload across the CPUs.
-    pool = multiprocessing.Pool(num_cpus)
+    pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
     pool_map_async_result = pool.map_async(
             generate_predicted_sedimentation_grid_parallel_pool_function,
             (

@@ -20,6 +20,8 @@ min_time = 0
 max_time = 230
 time_step = 1
 
+proximity_threshold_kms = 3000
+
 
 def generate_distance_grid(time):
     
@@ -34,7 +36,7 @@ def generate_distance_grid(time):
             '{0}/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml'.format(topology_dir),
             '{0}/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml'.format(topology_dir),
             '-g',
-            '{0}/agegrid_{1}.nc'.format(age_grid_dir, time),
+            '{0}/EarthByte_AREPS_Muller_etal_2016_AgeGrid-{1}.nc'.format(age_grid_dir, time),
             '-y {0}'.format(time),
             '-n',
             # Use all feature types in proximity file (according to Dietmar)...
@@ -46,6 +48,9 @@ def generate_distance_grid(time):
             '1',
             '-i',
             '{0}'.format(grid_spacing),
+            #'-q',
+            #str(proximity_threshold_kms),
+            #'-d', # output distance with time
             '-j',
             '-w',
             '-c',
@@ -56,18 +61,28 @@ def generate_distance_grid(time):
     
     call_system_command(command_line)
     
-    # Rename the mean distance files so that 'time' is at the end of the base filename -
-    # this way we can import them as time-dependent raster into GPlates.
-    for ext in ('xy', 'grd'):
-        
-        src_mean_distance = '{0}/distance_{1}_{2}_mean_distance.{3}'.format(output_dir, grid_spacing, time, ext)
-        dst_mean_distance = '{0}/mean_distance_{1}d_{2}.{3}'.format(output_dir, grid_spacing, time, ext)
-        
-        #print(src_mean_distance, dst_mean_distance)
-        
-        if os.access(dst_mean_distance, os.R_OK):
-            os.remove(dst_mean_distance)
-        os.rename(src_mean_distance, dst_mean_distance)
+    #
+    # Clamp the mean distance grids (and remove xy files).
+    # Also rename the mean distance grids so that 'time' is at the end of the base filename -
+    # this way we can import them as time-dependent raster into GPlates version 2.0 and earlier.
+    #
+    
+    src_mean_distance_basename = '{0}/distance_{1}_{2}_mean_distance'.format(output_dir, grid_spacing, time)
+    dst_mean_distance_basename = '{0}/mean_distance_{1}d_{2}'.format(output_dir, grid_spacing, time)
+    
+    src_mean_distance_xy = src_mean_distance_basename + '.xy'
+    if os.access(src_mean_distance_xy, os.R_OK):
+        os.remove(src_mean_distance_xy)
+    
+    src_mean_distance_grid = src_mean_distance_basename + '.nc'
+    dst_mean_distance_grid = dst_mean_distance_basename + '.nc'
+    
+    if os.access(dst_mean_distance_grid, os.R_OK):
+        os.remove(dst_mean_distance_grid)
+    
+    # Clamp mean distances.
+    call_system_command(["gmt", "grdmath", "-fg", str(proximity_threshold_kms), src_mean_distance_grid, "MIN", "=", dst_mean_distance_grid])
+    os.remove(src_mean_distance_grid)
 
 
 # Wraps around 'generate_distance_grid()' so can be used by multiprocessing.Pool.map()
@@ -79,23 +94,39 @@ def generate_distance_grid_parallel_pool_function(args):
         pass
 
 
+def low_priority():
+    """ Set the priority of the process to below-normal."""
+
+    import sys
+    try:
+        sys.getwindowsversion()
+    except AttributeError:
+        isWindows = False
+    else:
+        isWindows = True
+
+    if isWindows:
+        import psutil
+        
+        p = psutil.Process()
+        p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    else:
+        import os
+
+        os.nice(1)
+
 
 if __name__ == '__main__':
-    
-    #generate_distance_grid(197)
-    #sys.exit(0)
     
     try:
         num_cpus = multiprocessing.cpu_count()
     except NotImplementedError:
         num_cpus = 1
     
-    #num_cpus = 11
-    
     print('Generating distance grids...')
     
     # Split the workload across the CPUs.
-    pool = multiprocessing.Pool(num_cpus)
+    pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
     pool_map_async_result = pool.map_async(
             generate_distance_grid_parallel_pool_function,
             (
