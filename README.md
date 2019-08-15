@@ -55,3 +55,4 @@ https://doi.pangaea.de/10.1594/PANGAEA.835589?format=html#download
 ...seems to be a version of the global sediment thickness map, with their new grid merged into it
 http://store.pangaea.de/Publications/WobbeF_et_al_2014/sedthick_world_v3_5min_epsg4326.nc 
 
+Reference: Dutkiewicz, A., Müller, R.D., Wang, X., O’Callaghan, S., Cannon, J. and Wright, N.M., 2017. Predicting sediment thickness on vanished ocean crust since 200 Ma. Geochemistry, Geophysics, Geosystems, 18, 4586-4603, DOI:  https://doi.org/10.1002/2017GC007258.
