@@ -219,9 +219,6 @@ def two_feature_analysis(data, regressor, feature1_ind, feature2_ind,
                          vmin=-4,vmax=2,
                          plot_name='3D_plot.pdf'
                          ):
-    # set font to helvetica
-    rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-    rc('text', usetex=True)
 
     # set up variables
     X = data[:, :y_ind]
