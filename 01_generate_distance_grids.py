@@ -5,15 +5,44 @@ import multiprocessing
 import os
 import sys
 
+""" This script creates grids (netcdfs) of the mean distance to passive margins through time
+
+
+Requirements & Inputs:
+    - Python  
+    - Python scripts: ocean_basin_proximity.py, 
+    - GMT 5 (or later)
+    - Files associated with a tectonic model: agegrids, rotation file, plate boundaries, topologies
+
+Outputs:
+    - directory named 'distances_1d', with mean distance grids (in metres) through time.
+
+2020-02-14: Added comments, removed hardcoded names (for rotation file, etc) from definitions
+"""
+
+# ----- set directories and filenames
+
 output_dir = 'distances_1d'
 
-topology_dir = 'E:/Users/John/Downloads/GPlates/data/vector/Muller_etal_AREPS_Supplement'
-#topology_dir = 'D:/Users/john/Downloads/gplates/data/PlateModels/Muller_etal_AREPS_Supplement'
-age_grid_dir = 'E:/Users/John/Downloads/GPlates/data/rasters/Muller_etal_2016_AREPS_Agegrids/netCDF_0-230Ma'
-#age_grid_dir = 'D:/Users/john/Downloads/gplates/data/Muller_etal_2016_AREPS_Agegrids/netCDF_0-230Ma'
 
-proximity_features_file = 'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz'
+proximity_features_file = 'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz' # this is included in this repository
 
+# --- lcoation of files on your computer
+data_dir = '/Volumes/nmw2/Data/Muller_etal_2016_AREPS_Supplement_v1.15'
+
+# --- agegrids
+age_grid_dir = '%s/netCDF-4_0-230Ma' % data_dir   # change folder name if needed
+age_grid_filename = 'EarthByte_AREPS_v1.15_Muller_etal_2016_AgeGrid-'    # everything before 'time'
+age_grid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
+
+# --- topologies and other files
+topology_dir = '%s' % data_dir
+rotation_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir
+plateboundaries_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir
+topologybuildingblocks_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir
+
+
+# --- set times and spacing
 grid_spacing = 1.0
 
 min_time = 0
@@ -22,28 +51,33 @@ time_step = 1
 
 proximity_threshold_kms = 3000
 
+# -----
+if not os.path.exists(output_dir):
+    print('%s does not exist, creating now... ' % output_dir)
+    os.mkdir(output_dir)
 
+# ----- 
 def generate_distance_grid(time):
     
     command_line = [
             'python',
             'ocean_basin_proximity.py',
             '-r',
-            '{0}/Global_EarthByte_230-0Ma_GK07_AREPS.rot'.format(topology_dir),
+            '{0}'.format(rotation_filename),
             '-m',
             proximity_features_file,
             '-s',
-            '{0}/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml'.format(topology_dir),
-            '{0}/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml'.format(topology_dir),
+            '{0}'.format(plateboundaries_filename),
+            '{0}'.format(topologybuildingblocks_filename),
             '-g',
-            '{0}/EarthByte_AREPS_Muller_etal_2016_AgeGrid-{1}.nc'.format(age_grid_dir, time),
+            '{0}/{1}{2}.{3}'.format(age_grid_dir, age_grid_filename, time, age_grid_filename_ext),
             '-y {0}'.format(time),
             '-n',
             # Use all feature types in proximity file (according to Dietmar)...
             #'-b',
             #'PassiveContinentalBoundary',
             '-x',
-            '230',
+            '{0}'.format(max_time),
             '-t',
             '1',
             '-i',
@@ -61,7 +95,7 @@ def generate_distance_grid(time):
     
     call_system_command(command_line)
     
-    #
+
     # Clamp the mean distance grids (and remove xy files).
     # Also rename the mean distance grids so that 'time' is at the end of the base filename -
     # this way we can import them as time-dependent raster into GPlates version 2.0 and earlier.
