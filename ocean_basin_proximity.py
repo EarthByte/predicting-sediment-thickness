@@ -34,6 +34,8 @@ import shortest_path
 import subprocess
 import sys
 
+data_dir = '/Volumes/nmw2/Data/Muller_etal_2016_AREPS_Supplement_v1.15'
+coastline_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_Coastlines.gpml' % data_dir
 
 USE_SHORTEST_DISTANCE = True
 
@@ -513,8 +515,7 @@ def proximity(
     if USE_SHORTEST_DISTANCE:
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
-        obstacle_features = pygplates.FeatureCollection(
-                r'E:\Users\John\Downloads\GPlates\data\vector\Muller_etal_AREPS_Supplement\Global_EarthByte_230-0Ma_GK07_AREPS_Coastlines.gpml')
+        obstacle_features = pygplates.FeatureCollection(coastline_filename)
     
     # Iterate from paleo time until we exceed the maximum begin time of all ocean basin point locations.
     min_time_index = int(math.ceil(age_grid_paleo_time / time_increment))
