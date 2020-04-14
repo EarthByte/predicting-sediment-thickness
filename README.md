@@ -40,6 +40,9 @@ Generate compacted sediment thickness and decompacted sediment rate grids for pa
     + Also in that folder are rate grids obtained from the predicted thickness via:
         * `rate = decompact(thickness) / age`
 
+## Calculating the relationships for sedimentation rate and thickness
+The scripts to calculate the sedimentation rate and thickness relationships are in the folder `python_notebooks_and_input_data_archive`.
+If a new relationship needs to be derived (for example, to be consistent with a different present-day age grid), run the `sediment_rate.ipynb` and `sediment_thick.ipynb` notebooks (with a modified `alldata` file, and update the script `generate_predicted_sedimentation_grids.py` to be consistent with the polynomial coefficients obtained from the jupyter notebooks.
 
 ## Miscellaneous
 
