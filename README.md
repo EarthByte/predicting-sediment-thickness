@@ -10,7 +10,7 @@ Generate compacted sediment thickness and decompacted sediment rate grids for pa
     + Set the *age_grid_dir* variable to the location of the downloaded age grids *netCDF_0-230Ma* directory. Replace directory name if needed.
     + Set the *age_grid_filename* and *age_grid_filename_ext* to correspond to the filename of the agegrids themselves, and the extension.
     + Set the *topology_dir* variable to the location of the downloaded topologies *Muller_etal_AREPS_Supplement* directory.
-    + Set the *rotation_filename*, *plateboundaries_filename*, and *topologybuildingblocks_filename* to match those in the topology_dir.
+    + Set the *rotation_filenames* and *topology_filenames* to match those in the topology_dir.
     + Set the *grid_spacing* variable to 1 (degree):
          * This takes about 8 hours on a 6-core (12-thread) system.
     + Open the script *ocean_basin_proximity.py* and set the *data_dir* and *coastline_filename* to match those in the model you're using.

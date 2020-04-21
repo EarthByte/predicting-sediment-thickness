@@ -25,7 +25,9 @@ Outputs:
 output_dir = 'distances_1d'
 
 
-proximity_features_file = 'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz' # this is included in this repository
+proximity_features_files = [
+	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
+]
 
 # --- lcoation of files on your computer
 data_dir = '/Volumes/nmw2/Data/Muller_etal_2016_AREPS_Supplement_v1.15'
@@ -37,9 +39,13 @@ age_grid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not 
 
 # --- topologies and other files
 topology_dir = '%s' % data_dir
-rotation_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir
-plateboundaries_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir
-topologybuildingblocks_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir
+rotation_filenames = [
+	'%s/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir,
+]
+topology_filenames = [
+	'%s/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir,
+	'%s/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir,
+]
 
 
 # --- set times and spacing
@@ -59,16 +65,14 @@ if not os.path.exists(output_dir):
 # ----- 
 def generate_distance_grid(time):
     
-    command_line = [
-            'python',
-            'ocean_basin_proximity.py',
-            '-r',
-            '{0}'.format(rotation_filename),
-            '-m',
-            proximity_features_file,
-            '-s',
-            '{0}'.format(plateboundaries_filename),
-            '{0}'.format(topologybuildingblocks_filename),
+    command_line = ['python', 'ocean_basin_proximity.py']
+    command_line.extend(['-r'])
+    command_line.extend('{0}'.format(rotation_filename) for rotation_filename in rotation_filenames)
+    command_line.extend(['-m'])
+    command_line.extend('{0}'.format(proximity_features_file) for proximity_features_file in proximity_features_files)
+    command_line.extend(['-s'])
+    command_line.extend('{0}'.format(topology_filename) for topology_filename in topology_filenames)
+    command_line.extend([
             '-g',
             '{0}/{1}{2}.{3}'.format(age_grid_dir, age_grid_filename, time, age_grid_filename_ext),
             '-y {0}'.format(time),
@@ -89,7 +93,7 @@ def generate_distance_grid(time):
             '-w',
             '-c',
             str(1),
-            '{0}/distance_{1}_{2}'.format(output_dir, grid_spacing, time)]
+            '{0}/distance_{1}_{2}'.format(output_dir, grid_spacing, time)])
     
     print('Time:', time)
     
