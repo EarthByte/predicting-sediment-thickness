@@ -18,8 +18,7 @@
 
 
 ####################################################################################################
-# Predict the sedimentation rate (metres / million years) at paleo ocean basin point locations and #
-# determine compacted sediment thickness.                                                          #
+# Predict the sedimentation rate (metres / million years) at paleo ocean basin point locations.    #
 ####################################################################################################
 
 
@@ -32,11 +31,6 @@ import sys
 
 # Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
 DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES = 1
-
-# Default lithology parameters (defaults to shale).
-# Obtained from: Bahr, David B., et al. "Exponential approximations to compacted sediment porosity profiles." Computers & Geosciences 27.6 (2001): 691-700.
-DEFAULT_SURFACE_POROSITY = 0.63
-DEFAULT_POROSITY_EXP_DECAY = 5.71e-4
 
 
 # Reads the input xy file and returns a list of (lon, lat) points.
@@ -174,79 +168,6 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
     call_system_command(gmt_command_line)
 
 
-# Decompact total sediment thickness assuming a single lithology of the specified surface porosity and exponential decay.
-#
-# The decompacted (ie, surface) thickness d(z) of a compacted layer of height t(z) at depth z is:
-#
-#   d(z) = t(z) * (1 - porosity(z)) / (1 - porosity(0))
-#
-# ...due to the fact that the grain volume doesn't change with depth:
-#
-#   (1 - porosity(z1)) * t(z1) = (1 - porosity(z2)) * t(z2)
-#
-# ...and substituting z1=z and z2=0, and using d(z) = t(0) gives:
-#
-#   (1 - porosity(z)) * t(z) = (1 - porosity(0)) * d(z)
-#   d(z) = t(z) * (1 - porosity(z)) / (1 - porosity(0))
-#
-# Where the porosity is:
-#
-#   porosity(z) = porosity(0) * exp(-c * z)
-#
-# The total decompacted thickness is:
-#
-#   D = Integral(d(z), z = 0 -> T)
-#
-# ...where T is the total compacted thickness.
-#
-#   D = Integral(dz * (1 - porosity(z)) / (1 - porosity(0)), z = 0 -> T)
-#   D = Integral(dz * (1 - porosity(0) * exp(-c * z)) / (1 - porosity(0)), z = 0 -> T)
-#
-#     = (T + (porosity(0) / c) * (exp(-c * T) - 1)) / (1 - porosity(0))
-#
-# Rearranging gives...
-#
-#   T = D * (1 - porosity(0)) - (porosity(0) / c) * (exp(-c * T) - 1)
-#     = a * exp(-c * T) + b
-#
-# ...where a and b are:
-#
-#    a = -porosity(0) / c
-#
-#    b = D * (1 - porosity(0)) - a
-#
-# So the compacted thickness T:
-#
-#    T = a * exp(-c * T) + b
-#
-# ...can be solved iteratively by repeatedly substituting the left hand side back into the right hand side
-# until T converges on a solution. The initial T is chosen to be D (the decompacted thickness).
-#
-def compact_sediment_thickness(thickness, surface_porosity, porosity_exp_decay):
-    
-    # Constants 'a' and 'b' are calculated outside the iteration loop for efficiency.
-    a = -surface_porosity / porosity_exp_decay
-    b = thickness * (1 - surface_porosity) - a
-
-    # Start out with initial estimate - choose the decompacted thickness.
-    compacted_thickness = thickness
-
-    # Limit the number of iterations in case we never converge.
-    # Although should converge within around 20 iterations (for 1e-6 accuracy).
-    for iteration in xrange(1000):
-        new_compacted_thickness = a * math.exp(-porosity_exp_decay * compacted_thickness) + b
-        
-        # If we've converged within a tolerance then we're done.
-        if math.fabs(new_compacted_thickness - compacted_thickness) < 1e-6:
-            compacted_thickness = new_compacted_thickness
-            break
-        
-        # The new thickness becomes the old thickness for the next loop iteration.
-        compacted_thickness = new_compacted_thickness
-    
-    return compacted_thickness
-
-
 def predict_sedimentation_rate(
         age,
         distance,
@@ -281,17 +202,14 @@ def predict_sedimentation(
         variance_age,
         variance_distance,
         age_distance_polynomial_coefficients,
-        surface_porosity,
-        porosity_exp_decay,
         max_age = None,
         max_distance = None,
         sedimentation_rate_scale = 1.0):
     """
     Predicts average sedimentation rate for each ocean basin point based on its age and its
-    mean distance to passive continental margins. Also determines compacted sediment thickness.
+    mean distance to passive continental margins.
     
-    Returns: A 2-tuple of (lon_lat_average_sedimentation_rate_list, lon_lat_sediment_thickness_list)
-             where the two lists contain 3-tuples of (lon, lat, value).
+    Returns: A list containing 3-tuples of (lon, lat, sed_rate).
     """
     
     # Get the input point ages and mean distances to passive continental margins.
@@ -332,7 +250,7 @@ def predict_sedimentation(
     std_deviation_age = math.sqrt(variance_age)
     std_deviation_distance = math.sqrt(variance_distance)
     
-    # For each ocean basin point predict average sedimentation rate and determine the compacted sediment thickness.
+    # For each ocean basin point predict average sedimentation rate.
     lon_lat_average_sedimentation_rate_list = []
     lon_lat_sediment_thickness_list = []
     for lon, lat, age, distance in lon_lat_age_distance_list:
@@ -343,62 +261,41 @@ def predict_sedimentation(
                 std_deviation_age, std_deviation_distance,
                 age_distance_polynomial_coefficients)
         lon_lat_average_sedimentation_rate_list.append((lon, lat, predicted_sedimentation_rate))
-        
-        # The decompacted sediment thickness is the predicated average sedimentation rate multiplied by the ocean floor age.
-        decompacted_sediment_thickness = age * predicted_sedimentation_rate
-        
-        # Compact the sediment thickness.
-        compacted_sediment_thickness = compact_sediment_thickness(
-                decompacted_sediment_thickness, surface_porosity, porosity_exp_decay)
-        lon_lat_sediment_thickness_list.append((lon, lat, compacted_sediment_thickness))
     
-    return lon_lat_average_sedimentation_rate_list, lon_lat_sediment_thickness_list
+    return lon_lat_average_sedimentation_rate_list
     
     
 def write_sediment_data(
         average_sedimentation_rate_data,
-        sediment_thickness_data,
         output_filename_prefix,
         output_filename_extension,
         output_grd_file = None):
     
     average_sedimentation_rate_suffix = 'sed_rate'
-    sediment_thickness_suffix = 'sed_thick'
     
-    # Write average sedimentation rate and sediment thickness XYZ files.
+    # Write average sedimentation rate XYZ file.
     average_sedimentation_rate_xyz_filename = u'{0}_{1}.{2}'.format(
             output_filename_prefix, average_sedimentation_rate_suffix, output_filename_extension)
-    sediment_thickness_xyz_filename = u'{0}_{1}.{2}'.format(
-            output_filename_prefix, sediment_thickness_suffix, output_filename_extension)
     
     write_xyz_file(average_sedimentation_rate_xyz_filename, average_sedimentation_rate_data)
-    write_xyz_file(sediment_thickness_xyz_filename, sediment_thickness_data)
     
-    # Write average sedimentation rate and sediment thickness GRD files.
+    # Write average sedimentation rate GRD file.
     if output_grd_file:
         grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_file
         
         average_sedimentation_rate_grd_filename = u'{0}_{1}.nc'.format(
                 output_filename_prefix, average_sedimentation_rate_suffix)
-        sediment_thickness_grd_filename = u'{0}_{1}.nc'.format(
-                output_filename_prefix, sediment_thickness_suffix)
         
         write_grd_file_from_xyz(
                 average_sedimentation_rate_grd_filename,
                 average_sedimentation_rate_xyz_filename,
-                grid_spacing, num_grid_longitudes, num_grid_latitudes)
-        write_grd_file_from_xyz(
-                sediment_thickness_grd_filename,
-                sediment_thickness_xyz_filename,
                 grid_spacing, num_grid_longitudes, num_grid_latitudes)
 
 
 if __name__ == '__main__':
     
     __description__ = \
-    """Find the average sedimentation rate (metres / million years) at ocean basin point locations assuming a single lithology for the entire sediment thickness.
-    
-    The sediment thicknesses are decompacted and then divided by age at ocean basin point locations to get average sedimentation rates.
+    """Find the average sedimentation rate (metres / million years) at ocean basin point locations.
     
     An input xy file can be specified. If one is not specified then a uniform lon/lat grid of points will be generated internally
     (its grid spacing is controlled with the '-i' option and the grid point latitudes/longitudes use GMT gridline registration,
@@ -406,9 +303,9 @@ if __name__ == '__main__':
     arbitrary (lon, lat) point locations (it can also contain extra 3rd, 4th, etc, columns but they are ignored).
     
     By default a single 'xy' file containing average sedimentation rates is output.
-    An optional 'grd' can also be outpu (see the '-w' option)
+    An optional 'grd' can also be output (see the '-w' option)
     
-    If an ocean basin point falls outside the age grid or the sediment thickness grid then it is ignored.
+    If an ocean basin point falls outside the age grid or the distance grid then it is ignored.
 
     NOTE: Separate the positional and optional arguments with '--' (workaround for bug in argparse module).
     For example...
@@ -471,14 +368,6 @@ if __name__ == '__main__':
                 'age*distance*distance and distance*distance*distance. '
                 'These values come from the machine learning training scaler.')
     
-    parser.add_argument('-p', '--surface_porosity', type=float, default=DEFAULT_SURFACE_POROSITY,
-            help='The surface porosity in range [0,1]. '
-                'Defaults to {0} for shale.'.format(DEFAULT_SURFACE_POROSITY))
-    parser.add_argument('-c', '--porosity_exp_decay', type=float, default=DEFAULT_POROSITY_EXP_DECAY,
-            help='The exponential decay of porosity with depth where '
-            '"porosity = surface_porosity * exp(-porosity_exp_decay * depth)". '
-                'Defaults to {0} for shale.'.format(DEFAULT_POROSITY_EXP_DECAY))
-    
     def parse_unicode(value_string):
         try:
             # Filename uses the system encoding - decode from 'str' to 'unicode'.
@@ -523,7 +412,7 @@ if __name__ == '__main__':
     if input_points is None:
         sys.exit(1)
     
-    average_sedimentation_rate_data, sediment_thickness_data = predict_sedimentation(
+    average_sedimentation_rate_data = predict_sedimentation(
             input_points,
             args.age_grid_filename,
             args.distance_grid_filename,
@@ -532,8 +421,6 @@ if __name__ == '__main__':
             args.variance_age_distance[0], # variance_age
             args.variance_age_distance[1], # variance_distance
             args.age_distance_polynomial_coefficients,
-            args.surface_porosity,
-            args.porosity_exp_decay,
             args.clamp_age_distance[0] if args.clamp_age_distance is not None else None, # max_age
             args.clamp_age_distance[1] if args.clamp_age_distance is not None else None, # max_distance
             args.sedimentation_rate_scale)
@@ -543,7 +430,6 @@ if __name__ == '__main__':
     
     write_sediment_data(
             average_sedimentation_rate_data,
-            sediment_thickness_data,
             args.output_filename_prefix,
             args.output_filename_extension,
             (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_file else None)

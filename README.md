@@ -32,17 +32,9 @@ Generate compacted sediment thickness and decompacted sediment rate grids for pa
 - The script outputs predicted sedimentation rate grids:
     + Have units *cm/Ky* (not *m/My*).
     + Are located in *sedimentation_output/predicted_rate*.
-        * These are the sediment *rate* grids predicted using polynomials.
-    + Also in that folder are compacted thickness grids obtained from the predicted rate via:
-        * `thickness = compact(rate * age)`
-        * Note that these are not predicted from polynomials (they are derived from the predicted rate grids).
 - The script also outputs predicted sediment thickness grids:
     + Have units in metres.
     + Are located in *sedimentation_output/predicted_thickness*.
-        * These are the sediment *thickness* grids predicted using polynomials.
-    + Also in that folder are rate grids obtained from the predicted thickness via:
-        * `rate = decompact(thickness) / age`
-        * Note that these are not predicted from polynomials (they are derived from the predicted thickness grids).
 
 ## Calculating the relationships for sedimentation rate and thickness
 The scripts to calculate the sedimentation rate and thickness relationships are in the folder `python_notebooks_and_input_data_archive`.

@@ -91,13 +91,12 @@ def generate_predicted_sedimentation_grid(
             str(max_distance),
             '-f']
     command_line.extend(str(coeff) for coeff in age_distance_polynomial_coefficients)
+    # Only sediment rate requires scaling (sediment thickness does not)...
+    if scale_sedimentation_rate is not None:
+        command_line.extend([
+                '-s',
+                str(scale_sedimentation_rate)])
     command_line.extend([
-            '-p',
-            '0.63', # Surface porosity (shale)
-            '-c',
-            '5.71e-4', # Porosity decay (shale)
-            '-s',
-            str(scale_sedimentation_rate),
             '--',
             '{0}/sed_{1}_{2}'.format(output_dir, grid_spacing, time)])
     
@@ -116,14 +115,16 @@ def generate_predicted_sedimentation_grid(
         
         if os.access(dst_sed_rate, os.R_OK):
             os.remove(dst_sed_rate)
-        os.rename(src_sed_rate, dst_sed_rate)
+        if os.path.exists(src_sed_rate):
+            os.rename(src_sed_rate, dst_sed_rate)
         
         src_sed_thick = '{0}/sed_{1}_{2}_sed_thick.{3}'.format(output_dir, grid_spacing, time, ext)
         dst_sed_thick = '{0}/sed_thick_{1}d_{2}.{3}'.format(output_dir, grid_spacing, time, ext)
         
         if os.access(dst_sed_thick, os.R_OK):
             os.remove(dst_sed_thick)
-        os.rename(src_sed_thick, dst_sed_thick)
+        if os.path.exists(src_sed_thick):
+            os.rename(src_sed_thick, dst_sed_thick)
 
 
 # Wraps around 'generate_predicted_sedimentation_grid()' so can be used by multiprocessing.Pool.map()
@@ -274,7 +275,7 @@ if __name__ == '__main__':
     #
     #
     predict_sedimentation_script = 'predict_sediment_thickness.py'
-    scale_sedimentation_rate = 1.0  # No scaling - we're calculating rate (m/My) from thickness (m) and age (My).
+    scale_sedimentation_rate = None  # No scaling - we're predicting sediment thickness (not rate).
     mean_age =  61.45473054
     mean_distance = 1828.56033082
     variance_age = 1969.66845378
