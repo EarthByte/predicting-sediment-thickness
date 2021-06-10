@@ -22,7 +22,7 @@
 ##############################################################################################
 
 
-from __future__ import print_function
+
 import argparse
 from call_system_command import call_system_command
 import math
@@ -274,7 +274,7 @@ def write_sediment_data(
     sediment_thickness_suffix = 'sed_thick'
     
     # Write sediment thickness XYZ file.
-    sediment_thickness_xyz_filename = u'{0}_{1}.{2}'.format(
+    sediment_thickness_xyz_filename = '{0}_{1}.{2}'.format(
             output_filename_prefix, sediment_thickness_suffix, output_filename_extension)
     
     write_xyz_file(sediment_thickness_xyz_filename, sediment_thickness_data)
@@ -283,7 +283,7 @@ def write_sediment_data(
     if output_grd_file:
         grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_file
         
-        sediment_thickness_grd_filename = u'{0}_{1}.nc'.format(
+        sediment_thickness_grd_filename = '{0}_{1}.nc'.format(
                 output_filename_prefix, sediment_thickness_suffix)
         
         write_grd_file_from_xyz(

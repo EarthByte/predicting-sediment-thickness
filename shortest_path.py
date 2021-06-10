@@ -84,7 +84,7 @@
 #############################################################
 
 
-from __future__ import print_function
+
 import heapq
 import math
 import pygplates
@@ -253,12 +253,12 @@ class Grid(object):
         
         # Create the nodes.
         #print('Generating grid nodes...')
-        for lat_index in xrange(num_latitudes):
+        for lat_index in range(num_latitudes):
             # The 0.5 puts the point in the centre of the grid pixel.
             # This also avoids sampling right on the poles.
             lat = -90 + (lat_index + 0.5) * grid_spacing_degrees
             
-            for lon_index in xrange(num_longitudes):
+            for lon_index in range(num_longitudes):
                 # The 0.5 puts the point in the centre of the grid pixel.
                 # This also avoids sampling right on the dateline where there might be
                 # age grid or static polygon artifacts.
@@ -275,8 +275,8 @@ class Grid(object):
         
         # Each root quad tree node is quadrant of the globe (square in lat/lon space of size 90 x 90 degrees).
         #print('Generating quad tree nodes...')
-        for root_node_lat_index in xrange(2):
-            for root_node_lon_index in xrange(4):
+        for root_node_lat_index in range(2):
+            for root_node_lon_index in range(4):
                 root_node = self._create_quad_tree_node(root_node_lon_index, root_node_lat_index, 0)
                 root_quad_tree_nodes.append(root_node)
         
@@ -363,15 +363,15 @@ class Grid(object):
         if level + Grid.GRID_NODE_DEPTH_PER_QUAD_TREE_NODE >= self.subdivision_depth:
             # Reached leaf quad tree node, so add the grid point indices.
             quad_tree_node.grid_node_indices = []
-            for lat_index in xrange(start_lat_index, stop_lat_index):
-                for lon_index in xrange(start_lon_index, stop_lon_index):
+            for lat_index in range(start_lat_index, stop_lat_index):
+                for lon_index in range(start_lon_index, stop_lon_index):
                     node_index = lat_index * self.num_longitudes + lon_index
                     quad_tree_node.grid_node_indices.append(node_index)
         else:
             # Create four child quad tree nodes.
             quad_tree_node.child_quad_tree_nodes = []
-            for child_node_lat_offset in xrange(2):
-                for child_node_lon_offset in xrange(2):
+            for child_node_lat_offset in range(2):
+                for child_node_lon_offset in range(2):
                     quad_tree_node.child_quad_tree_nodes.append(
                             self._create_quad_tree_node(
                                     2 * node_lon_index + child_node_lon_offset,

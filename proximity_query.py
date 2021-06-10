@@ -158,7 +158,7 @@
 #####################################################################
 
 
-from __future__ import print_function
+
 import points_spatial_tree
 import math
 import pygplates
@@ -276,7 +276,7 @@ def find_closest_geometries_to_points_using_points_spatial_tree(
         raise ValueError('Number of geometries must match number of geometry proxies.')
     
     # Indices of the geometries to visit as we descend into the points spatial tree - initially all geometries.
-    geometry_indices_to_visit = range(len(geometries))
+    geometry_indices_to_visit = list(range(len(geometries)))
     
     # By default no points are within threshold distance to any geometry.
     # If any are found to be within threshold distance then we'll set the proxy of the closest geometry.
@@ -609,7 +609,7 @@ def _visit_closest_geometries_to_points(
             # Essentially remove any geometries whose distance compared to the closest geometry exceeds
             # the diameter of the current node's bounding circle.
             new_geometry_indices_to_visit = []
-            for index in xrange(0, len(distance_node_centre_to_geometries)):
+            for index in range(0, len(distance_node_centre_to_geometries)):
                 distance_node_centre_to_geometry, geometry_index = distance_node_centre_to_geometries[index]
                 if distance_node_centre_to_geometry - min_distance_node_centre_to_geometries > node_bounding_circle_diameter:
                     # All remaining geometries are essentially removed since the distance list is sorted.

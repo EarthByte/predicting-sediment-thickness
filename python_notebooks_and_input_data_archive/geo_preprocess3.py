@@ -229,8 +229,8 @@ def two_feature_analysis(data, regressor, feature1_ind, feature2_ind,
 
     # learn y just based on feature
     model = regressor.fit(feature, log_thick)
-    print('Polynomial feature names: {0}'.format(model.get_params()['poly'].get_feature_names()))
-    print('Polynomial coefficients: {0}'.format(model.get_params()['linear'].coef_))
+    print(('Polynomial feature names: {0}'.format(model.get_params()['poly'].get_feature_names())))
+    print(('Polynomial coefficients: {0}'.format(model.get_params()['linear'].coef_)))
 
     # generate query sets
     fea1_min = np.min(feature[:, 0])

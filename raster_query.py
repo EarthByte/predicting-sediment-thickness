@@ -25,7 +25,7 @@
 ################################################################################################
 
 
-from __future__ import print_function
+
 import argparse
 from call_system_command import call_system_command
 import math
@@ -78,7 +78,7 @@ def query_raster_at_points(
             raster_grid_points,
             raster_grid_points_spatial_tree,
             # Indices into the raster grid points and scalars...
-            range(len(raster_grid_points)),
+            list(range(len(raster_grid_points))),
             distance_threshold_radians = search_radius_radians)
     
     # List of associated raster values at query point locations.
@@ -204,7 +204,7 @@ def query_raster_with_reconstructed_geometries(
             smoothing_radius_radians)
     
     query_data = []
-    for query_point_index in xrange(len(query_points)):
+    for query_point_index in range(len(query_points)):
         query_point_lat, query_point_lon = query_points[query_point_index].to_lat_lon()
         query_point_scalar = query_point_scalars[query_point_index]
         query_point_weight = query_point_weights[query_point_index]
@@ -304,7 +304,7 @@ def query_raster_with_resolved_topologies(
             smoothing_radius_radians)
     
     query_data = []
-    for query_point_index in xrange(len(query_points)):
+    for query_point_index in range(len(query_points)):
         query_point_lat, query_point_lon = query_points[query_point_index].to_lat_lon()
         query_point_scalar = query_point_scalars[query_point_index]
         query_point_weight = query_point_weights[query_point_index]

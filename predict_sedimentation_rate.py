@@ -22,7 +22,7 @@
 ####################################################################################################
 
 
-from __future__ import print_function
+
 import argparse
 from call_system_command import call_system_command
 import math
@@ -274,7 +274,7 @@ def write_sediment_data(
     average_sedimentation_rate_suffix = 'sed_rate'
     
     # Write average sedimentation rate XYZ file.
-    average_sedimentation_rate_xyz_filename = u'{0}_{1}.{2}'.format(
+    average_sedimentation_rate_xyz_filename = '{0}_{1}.{2}'.format(
             output_filename_prefix, average_sedimentation_rate_suffix, output_filename_extension)
     
     write_xyz_file(average_sedimentation_rate_xyz_filename, average_sedimentation_rate_data)
@@ -283,7 +283,7 @@ def write_sediment_data(
     if output_grd_file:
         grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_file
         
-        average_sedimentation_rate_grd_filename = u'{0}_{1}.nc'.format(
+        average_sedimentation_rate_grd_filename = '{0}_{1}.nc'.format(
                 output_filename_prefix, average_sedimentation_rate_suffix)
         
         write_grd_file_from_xyz(

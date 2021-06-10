@@ -74,7 +74,7 @@
 #####################################################################
 
 
-from __future__ import print_function
+
 import points_spatial_tree
 import math
 import pygplates
@@ -153,7 +153,7 @@ def find_polygons_using_points_spatial_tree(
     #
     # 'polygons_and_proxies' is a list of 2-tuples (polygon, polygon_proxy).
     polygons_and_proxies = sorted(
-            ((polygons[index], polygon_proxies[index]) for index in xrange(len(polygons))),
+            ((polygons[index], polygon_proxies[index]) for index in range(len(polygons))),
             key=lambda polygon_and_proxy: polygon_and_proxy[0].get_area(),
             reverse=True)
     

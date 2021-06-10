@@ -22,7 +22,7 @@
 #################################################################################################
 
 
-from __future__ import print_function
+
 import argparse
 import subprocess
 import math
@@ -269,11 +269,11 @@ def write_average_sedimentation_rate_data(
         output_filename_extension,
         output_grd_file = None):
     
-    xyz_filename = u'{0}.{1}'.format(output_filename_prefix, output_filename_extension)
+    xyz_filename = '{0}.{1}'.format(output_filename_prefix, output_filename_extension)
     write_xyz_file(xyz_filename, average_sedimentation_rate_data)
     
     if output_grd_file:
-        grd_filename = u'{0}.grd'.format(output_filename_prefix)
+        grd_filename = '{0}.grd'.format(output_filename_prefix)
         grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_file
         write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes)
 

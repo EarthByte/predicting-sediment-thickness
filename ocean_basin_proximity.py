@@ -22,7 +22,7 @@
 #############################################################################################################################
 
 
-from __future__ import print_function
+
 import argparse
 from call_system_command import call_system_command
 import math
@@ -386,7 +386,7 @@ class FeatureProximityData(object):
     
     # Merge other feature proximity data in us.
     def update(self, other):
-        for time_index, other_time_data in other.get_all_time_data().iteritems():
+        for time_index, other_time_data in other.get_all_time_data().items():
             time_data = self.get_time_data(time_index)
             time_data += other_time_data
         self.mean_data += other.get_mean_data();
@@ -408,7 +408,7 @@ class ProximityData(object):
     
     # Merge other proximity data into us.
     def update(self, other):
-        for feature_name, other_feature_data in other.get_all_feature_data().iteritems():
+        for feature_name, other_feature_data in other.get_all_feature_data().items():
             self.get_feature_data(feature_name).update(other_feature_data)
 
 
@@ -695,7 +695,7 @@ def proximity(
             if output_mean_distance or output_standard_deviation_distance:
                 # Update the distance statistics for the current ocean basin point.
                 ocean_basin_point_statistics = ocean_basin_points_statistics.setdefault(ocean_basin_paleo_lon_lat_point, {})
-                for proximity_feature_name, proximity in ocean_basin_proximities.iteritems():
+                for proximity_feature_name, proximity in ocean_basin_proximities.items():
                     proximity_in_kms = proximity * pygplates.Earth.mean_radius_in_kms
                     num_distances, sum_distances, sum_square_distances = ocean_basin_point_statistics.setdefault(proximity_feature_name, (0, 0.0, 0.0))
                     num_distances += 1
@@ -717,7 +717,7 @@ def proximity(
                 
                 ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
                 
-                for proximity_feature_name, proximity in ocean_basin_proximities.iteritems():
+                for proximity_feature_name, proximity in ocean_basin_proximities.items():
                     # Group first by feature name and then by time.
                     # This makes it easier to do the final writes to the output files.
                     feature_proximity_data = proximity_data.get_feature_data(proximity_feature_name)
@@ -742,9 +742,9 @@ def proximity(
                             overriding_plate.get_feature().get_reconstruction_plate_id()))
     
     if output_mean_distance or output_standard_deviation_distance:
-        for (ocean_basin_lon, ocean_basin_lat), ocean_basin_point_statistics in ocean_basin_points_statistics.iteritems():
+        for (ocean_basin_lon, ocean_basin_lat), ocean_basin_point_statistics in ocean_basin_points_statistics.items():
             
-            for proximity_feature_name, (num_distances, sum_distances, sum_square_distances) in ocean_basin_point_statistics.iteritems():
+            for proximity_feature_name, (num_distances, sum_distances, sum_square_distances) in ocean_basin_point_statistics.items():
                 # Group by feature name. This makes it easier to do the final writes to the output files.
                 feature_proximity_data = proximity_data.get_feature_data(proximity_feature_name)
                 
@@ -845,7 +845,7 @@ def proximity_parallel(
     # falling mostly outside ocean basin regions, and hence not getting processed, resulting
     # in some tasks progressing much faster than others.
     pool_input_points_sub_lists = [input_points[i:len(input_points):num_tasks]
-            for i in xrange(num_tasks)]
+            for i in range(num_tasks)]
     
     # Split the workload across the CPUs.
     try:
@@ -913,19 +913,19 @@ def write_proximity_data(
         output_grd_files = None):
     
     all_proximity_feature_data = proximity_data.get_all_feature_data()
-    for feature_name, proximity_feature_data in all_proximity_feature_data.iteritems():
+    for feature_name, proximity_feature_data in all_proximity_feature_data.items():
         
         if output_distance_with_time or output_overriding_plate_with_time:
-            for time_index, proximity_feature_time_data in proximity_feature_data.get_all_time_data().iteritems():
+            for time_index, proximity_feature_time_data in proximity_feature_data.get_all_time_data().items():
                 time = time_index * time_increment
                 if feature_name is not None:
-                    xyz_filename = u'{0}_{1}_{2:0.2f}.{3}'.format(output_filename_prefix, feature_name.decode('utf-8'), time, output_filename_extension)
+                    xyz_filename = '{0}_{1}_{2:0.2f}.{3}'.format(output_filename_prefix, feature_name.decode('utf-8'), time, output_filename_extension)
                     if output_grd_files:
-                        grd_filename = u'{0}_{1}_{2:0.2f}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'), time)
+                        grd_filename = '{0}_{1}_{2:0.2f}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'), time)
                 else:
-                    xyz_filename = u'{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
+                    xyz_filename = '{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
                     if output_grd_files:
-                        grd_filename = u'{0}_{1:0.2f}.nc'.format(output_filename_prefix, time)
+                        grd_filename = '{0}_{1:0.2f}.nc'.format(output_filename_prefix, time)
                 
                 write_xyz_file(xyz_filename, proximity_feature_time_data)
                 if output_grd_files:
@@ -938,13 +938,13 @@ def write_proximity_data(
         
         if output_mean_distance:
             if feature_name is not None:
-                xyz_mean_distance_filename = u'{0}_mean_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
+                xyz_mean_distance_filename = '{0}_mean_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
                 if output_grd_files:
-                    grd_mean_distance_filename = u'{0}_mean_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
+                    grd_mean_distance_filename = '{0}_mean_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
             else:
-                xyz_mean_distance_filename = u'{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
+                xyz_mean_distance_filename = '{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
                 if output_grd_files:
-                    grd_mean_distance_filename = u'{0}_mean_distance.nc'.format(output_filename_prefix)
+                    grd_mean_distance_filename = '{0}_mean_distance.nc'.format(output_filename_prefix)
                 
             write_xyz_file(xyz_mean_distance_filename, proximity_feature_data.get_mean_data())
             if output_grd_files:
@@ -957,13 +957,13 @@ def write_proximity_data(
         
         if output_standard_deviation_distance:
             if feature_name is not None:
-                xyz_standard_deviation_distance_filename = u'{0}_std_dev_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
+                xyz_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
                 if output_grd_files:
-                    grd_standard_deviation_distance_filename = u'{0}_std_dev_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
+                    grd_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
             else:
-                xyz_standard_deviation_distance_filename = u'{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
+                xyz_standard_deviation_distance_filename = '{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
                 if output_grd_files:
-                    grd_standard_deviation_distance_filename = u'{0}_std_dev_distance.nc'.format(output_filename_prefix)
+                    grd_standard_deviation_distance_filename = '{0}_std_dev_distance.nc'.format(output_filename_prefix)
                 
             write_xyz_file(xyz_standard_deviation_distance_filename, proximity_feature_data.get_std_dev_data())
             if output_grd_files:
