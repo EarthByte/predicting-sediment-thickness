@@ -805,8 +805,9 @@ class DistanceGrid(object):
         if not distance_sorted_quad_tree_nodes:
             return current_distance_threshold_radians
         
+        #print(distance_sorted_quad_tree_nodes)
         # Visit the closest quad tree nodes first since they will reduce the distance threshold.
-        distance_sorted_quad_tree_nodes.sort()
+        distance_sorted_quad_tree_nodes.sort(key=lambda d: d[0])
         for distance_geometry_to_quad_tree_node, quad_tree_node in distance_sorted_quad_tree_nodes:
             if distance_geometry_to_quad_tree_node < current_distance_threshold_radians:
                 # Visit child nodes (if internal node) or test each grid point (if leaf node).

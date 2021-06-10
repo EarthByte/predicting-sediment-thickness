@@ -34,7 +34,7 @@ import shortest_path
 import subprocess
 import sys
 
-data_dir = '/Volumes/nmw2/Data/Muller_etal_2016_AREPS_Supplement_v1.15'
+data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17'
 coastline_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_Coastlines.gpml' % data_dir
 
 USE_SHORTEST_DISTANCE = True
@@ -123,7 +123,7 @@ def get_positions_and_ages(input_points, age_grid_filename):
     stdout_data = call_system_command(
             # The command-line strings to execute GMT 'grdtrack'...
             ["gmt", "grdtrack", "-nl", "-G{0}".format(age_grid_filename)],
-            stdin=input_points_data,
+            stdin=input_points_data.encode('utf-8'),
             return_stdout=True)
     
     #print('Stdout: {0}'.format(stdout_data))
@@ -132,7 +132,7 @@ def get_positions_and_ages(input_points, age_grid_filename):
     
     # Read lon, lat and age values from the output of 'grdtrack'.
     for line in stdout_data.splitlines():
-        if line.strip().startswith('#'):
+        if line.strip().startswith(b'#'):
             continue
         
         line_data = line.split()
@@ -303,7 +303,7 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
         gmt_command_line = [
                 "gmt",
                 "nearneighbor",
-                xyz_filename.encode(sys.getfilesystemencoding()),
+                xyz_filename,
                 "-N4/1", # Divide search radius into 4 sectors but only require a value in 1 sector.
                 "-S{0}d".format(0.7 * grid_spacing),
                 "-I{0}".format(grid_spacing),
@@ -316,14 +316,14 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
                 #        -90 + 0.5 * grid_spacing,
                 #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
-                "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
+                "-G{0}".format(grd_filename)]
     else:
         # The command-line strings to execute GMT 'xyz2grd'.
         # For example "xyz2grd output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -Goutput_mean_distance.nc".
         gmt_command_line = [
                 "gmt",
                 "xyz2grd",
-                xyz_filename.encode(sys.getfilesystemencoding()),
+                xyz_filename,
                 "-I{0}".format(grid_spacing),
                 # Use GMT gridline registration since our input point grid has data points on the grid lines.
                 # Gridline registration is the default so we don't need to force pixel registration...
@@ -334,7 +334,7 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
                 #        -90 + 0.5 * grid_spacing,
                 #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
-                "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
+                "-G{0}".format(grd_filename)]
     
     call_system_command(gmt_command_line)
 
@@ -919,9 +919,9 @@ def write_proximity_data(
             for time_index, proximity_feature_time_data in proximity_feature_data.get_all_time_data().items():
                 time = time_index * time_increment
                 if feature_name is not None:
-                    xyz_filename = '{0}_{1}_{2:0.2f}.{3}'.format(output_filename_prefix, feature_name.decode('utf-8'), time, output_filename_extension)
+                    xyz_filename = '{0}_{1}_{2:0.2f}.{3}'.format(output_filename_prefix, feature_name, time, output_filename_extension)
                     if output_grd_files:
-                        grd_filename = '{0}_{1}_{2:0.2f}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'), time)
+                        grd_filename = '{0}_{1}_{2:0.2f}.nc'.format(output_filename_prefix, feature_name, time)
                 else:
                     xyz_filename = '{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
                     if output_grd_files:
@@ -938,9 +938,9 @@ def write_proximity_data(
         
         if output_mean_distance:
             if feature_name is not None:
-                xyz_mean_distance_filename = '{0}_mean_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
+                xyz_mean_distance_filename = '{0}_mean_distance_{1}.{2}'.format(output_filename_prefix, feature_name, output_filename_extension)
                 if output_grd_files:
-                    grd_mean_distance_filename = '{0}_mean_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
+                    grd_mean_distance_filename = '{0}_mean_distance_{1}.nc'.format(output_filename_prefix, feature_name)
             else:
                 xyz_mean_distance_filename = '{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
                 if output_grd_files:
@@ -957,9 +957,9 @@ def write_proximity_data(
         
         if output_standard_deviation_distance:
             if feature_name is not None:
-                xyz_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.{2}'.format(output_filename_prefix, feature_name.decode('utf-8'), output_filename_extension)
+                xyz_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.{2}'.format(output_filename_prefix, feature_name, output_filename_extension)
                 if output_grd_files:
-                    grd_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.nc'.format(output_filename_prefix, feature_name.decode('utf-8'))
+                    grd_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.nc'.format(output_filename_prefix, feature_name)
             else:
                 xyz_standard_deviation_distance_filename = '{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
                 if output_grd_files:
@@ -1100,13 +1100,7 @@ if __name__ == '__main__':
                             DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
         
         def parse_unicode(value_string):
-            try:
-                # Filename uses the system encoding - decode from 'str' to 'unicode'.
-                filename = value_string.decode(sys.getfilesystemencoding())
-            except UnicodeDecodeError:
-                raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
-            
-            return filename
+            return value_string
         
         parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
                 metavar='ocean_basin_points_filename',

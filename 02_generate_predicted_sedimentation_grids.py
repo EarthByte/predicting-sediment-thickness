@@ -1,7 +1,7 @@
 
 from call_system_command import call_system_command
 import multiprocessing
-import os
+import os, shutil
 import sys
 
 """ This script creates grids (netcdfs) of sediment thickness and sediment rate through time
@@ -29,17 +29,17 @@ Outputs:
 
 # ----- set directories and filenames
 
-data_dir = '/Volumes/nmw2/Data/Muller_etal_2016_AREPS_Supplement_v1.15'
-age_grid_dir = '%s/netCDF-4_0-230Ma' % data_dir
+data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS'
+age_grid_dir = '%s/Muller_etal_2016_AREPS_Agegrids/Muller_etal_2016_AREPS_Agegrids_v1.17/Muller_etal_2016_AREPS_v1.17_netCDF' % data_dir
 
-agegrid_filename = 'EarthByte_AREPS_v1.15_Muller_etal_2016_AgeGrid-'  # everything before 'time'
+agegrid_filename = 'Muller_etal_2016_AREPS_v1.17_AgeGrid-'  # everything before 'time'
 agegrid_filename_ext = 'nc'
 
 
 distance_grid_dir = 'distances_1d'
 distance_base_name = 'mean_distance_1.0d'
 
-output_base_dir = '/Users/nickywright/repos/predicting-sediment-thickness'
+output_base_dir = '/home/michael/workspace/predicting-sediment-thickness'
 sediment_output_sub_dir = 'sedimentation_output'
 
 # --- set times and spacing
@@ -70,8 +70,12 @@ def generate_predicted_sedimentation_grid(
         age_distance_polynomial_coefficients,
         output_dir):
     
+    
+    py_cmd='python3'
+    if shutil.which('python3') is None:
+        py_cmd = 'python'
     command_line = [
-            'python',
+            py_cmd,
             predict_sedimentation_script,
             '-d',
             '{0}/{1}_{2}.nc'.format(distance_grid_dir, distance_base_name, time),
@@ -102,6 +106,8 @@ def generate_predicted_sedimentation_grid(
     
     #print('Time:', time)
     #print(command_line)
+
+    #print(' '.join(command_line))
     
     # Execute the command.
     call_system_command(command_line)

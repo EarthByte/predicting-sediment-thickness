@@ -2,7 +2,7 @@
 from call_system_command import call_system_command
 import math
 import multiprocessing
-import os
+import os, shutil
 import sys
 
 """ This script creates grids (netcdfs) of the mean distance to passive margins through time
@@ -30,21 +30,21 @@ proximity_features_files = [
 ]
 
 # --- lcoation of files on your computer
-data_dir = '/Volumes/nmw2/Data/Muller_etal_2016_AREPS_Supplement_v1.15'
+data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS'
 
 # --- agegrids
-age_grid_dir = '%s/netCDF-4_0-230Ma' % data_dir   # change folder name if needed
-age_grid_filename = 'EarthByte_AREPS_v1.15_Muller_etal_2016_AgeGrid-'    # everything before 'time'
+age_grid_dir = '%s/Muller_etal_2016_AREPS_Agegrids/Muller_etal_2016_AREPS_Agegrids_v1.17/Muller_etal_2016_AREPS_v1.17_netCDF' % data_dir   # change folder name if needed
+age_grid_filename = 'Muller_etal_2016_AREPS_v1.17_AgeGrid-'    # everything before 'time'
 age_grid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
 
 # --- topologies and other files
 topology_dir = '%s' % data_dir
 rotation_filenames = [
-	'%s/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir,
+	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir,
 ]
 topology_filenames = [
-	'%s/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir,
-	'%s/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir,
+	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir,
+	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir,
 ]
 
 
@@ -64,8 +64,11 @@ if not os.path.exists(output_dir):
 
 # ----- 
 def generate_distance_grid(time):
+    py_cmd='python3'
+    if shutil.which('python3') is None:
+        py_cmd = 'python'
     
-    command_line = ['python', 'ocean_basin_proximity.py']
+    command_line = [py_cmd, 'ocean_basin_proximity.py']
     command_line.extend(['-r'])
     command_line.extend('{0}'.format(rotation_filename) for rotation_filename in rotation_filenames)
     command_line.extend(['-m'])
@@ -97,6 +100,7 @@ def generate_distance_grid(time):
     
     print('Time:', time)
     
+    #print(' '.join(command_line))
     call_system_command(command_line)
     
 

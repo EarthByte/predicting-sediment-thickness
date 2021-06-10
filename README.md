@@ -4,7 +4,7 @@ Generate compacted sediment thickness and decompacted sediment rate grids for pa
 
 ## Workflow procedure
 
-- Download the age grids (0-230Ma) and associated topologies, e.g. from ftp://ftp.earthbyte.org/Data_Collections/Muller_etal_2016_AREPS/
+- Download the age grids (0-230Ma) and associated topologies, e.g. from the webdav folder https://www.earthbyte.org/webdav/ftp/Data_Collections/Muller_etal_2016_AREPS/ (Google how to connect to a webdav folder. It is nice and easy) or if you prefer the old FTP protocal ftp://ftp.earthbyte.org/Data_Collections/Muller_etal_2016_AREPS/ 
 - Open the *01_generate_distance_grids.py* script and:
     + Set the *data_dir* variable to the location of all your files (agegrids, topologies, etc)
     + Set the *age_grid_dir* variable to the location of the downloaded age grids *netCDF_0-230Ma* directory. Replace directory name if needed.
