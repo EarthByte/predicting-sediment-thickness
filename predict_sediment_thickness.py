@@ -97,13 +97,13 @@ def get_positions_and_scalars(input_points, scalar_grid_filename, max_scalar=Non
 
     # The command-line strings to execute GMT 'grdtrack'.
     grdtrack_command_line = ["gmt", "grdtrack", "-nl", "-G{0}".format(scalar_grid_filename)]
-    stdout_data = call_system_command(grdtrack_command_line, stdin=input_points_data, return_stdout=True)
+    stdout_data = call_system_command(grdtrack_command_line, stdin=input_points_data.encode('utf-8'), return_stdout=True)
     
     lon_lat_scalar_list = []
     
     # Read lon, lat and scalar values from the output of 'grdtrack'.
     for line in stdout_data.splitlines():
-        if line.strip().startswith('#'):
+        if line.strip().startswith(b'#'):
             continue
         
         line_data = line.split()
@@ -157,7 +157,7 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
     gmt_command_line = [
             "gmt",
             "nearneighbor",
-            xyz_filename.encode(sys.getfilesystemencoding()),
+            xyz_filename,
             "-N4",
             "-S{0}d".format(1.5 * grid_spacing),
             "-I{0}".format(grid_spacing),
@@ -165,7 +165,7 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
             # Use GMT gridline registration since our input point grid has data points on the grid lines.
             # Gridline registration is the default so we don't need to force pixel registration...
             #"-r", # Force pixel registration since data points are at centre of cells.
-            "-G{0}".format(grd_filename.encode(sys.getfilesystemencoding()))]
+            "-G{0}".format(grd_filename)]
     call_system_command(gmt_command_line)
 
 
@@ -363,14 +363,15 @@ if __name__ == '__main__':
                 'These values come from the machine learning training scaler.')
     
     def parse_unicode(value_string):
-        try:
-            # Filename uses the system encoding - decode from 'str' to 'unicode'.
-            filename = value_string.decode(sys.getfilesystemencoding())
-        except UnicodeDecodeError:
-            raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
+        #try:
+        #    # Filename uses the system encoding - decode from 'str' to 'unicode'.
+        #    filename = value_string.decode(sys.getfilesystemencoding())
+        #except UnicodeDecodeError:
+        #    raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
         
-        return filename
-    
+        #return filename
+        return value_string
+
     parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
             metavar='ocean_basin_points_filename',
             help='Optional input xy file containing the ocean basin point locations. '
