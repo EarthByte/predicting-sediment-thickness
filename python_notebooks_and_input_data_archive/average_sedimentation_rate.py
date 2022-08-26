@@ -115,7 +115,8 @@ def get_positions_and_scalars(input_points, scalar_grid_filename):
             grdtrack_command_line,
             bufsize=1,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE)
+            stdout=subprocess.PIPE,
+            text=True)   # NW 20220826: add text=True to get this working in python3
         
         stdout_data, stderr_data = grdtrack_pipe.communicate(input_points_data)
     except OSError:
@@ -174,21 +175,24 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
     
     # The command-line strings to execute GMT 'nearneighbor'.
     # For example "nearneighbor output_mean_distance.xy -R-180/180/-90/90 -I1 -N4 -S1d -Goutput_mean_distance.grd=cf"
-    # ...with "=cf" generating NetCDF-3, instead of NetCDF-4, files (GPlates 2.0 can only load NetCDF-3).
+    # ...with "=cf" generating NetCDF-3, instead of NetCDF-4, files (GPlates 2.0 can only load NetCDF-3)
     # NW 20200120: edited to be GMT5
+    # NW 20220826: edited to remove extra -I flag, and added -V and -fg. Removed =cf for output grid, since GPlates (2.1+) can load in NetCDF-4 grids.
     gmt_command_line = ["gmt",
             "nearneighbor",
             xyz_filename.encode(sys.getfilesystemencoding()),
             "-I{0}".format(grid_spacing),
             "-N4",
             "-S{0}d".format(1.5 * grid_spacing),
-            "-I{0}".format(grid_spacing),
             # "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
             "-Rd",
+            "-V",
+            "-fg",
             # Use GMT gridline registration since our input point grid has data points on the grid lines.
             # Gridline registration is the default so we don't need to force pixel registration...
             #"-r", # Force pixel registration since data points are at centre of cells.
-            "-G{0}=cf".format(grd_filename.encode(sys.getfilesystemencoding()))]
+            #"-G{0}=cf".format(grd_filename.encode(sys.getfilesystemencoding()))]
+            "-G{0}".format(grd_filename)]
     
     try:
         # Use the GMT 'nearneighbor' command to create a grd file from a xyz file.
@@ -266,8 +270,8 @@ def average_sedimentation_rate(
         if age < 1:
             age = 1
         # Decompact the sediment thickness and divide by ocean floor age.
-        average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay) / age
-        # average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay) 
+        average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay) / age.   # decompacted sediment rate
+        # average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay)        # decompacted sediment thickness
         lon_lat_average_sedimentation_rate_list.append((lon, lat, average_sedimentation_rate))
     
     return lon_lat_average_sedimentation_rate_list
@@ -350,6 +354,10 @@ if __name__ == '__main__':
             filename = value_string.decode(sys.getfilesystemencoding())
         except UnicodeDecodeError:
             raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
+            
+        # NW 20220826: add extra except, since python was complaining.
+        except AttributeError:
+            filename = value_string
         
         return filename
     
