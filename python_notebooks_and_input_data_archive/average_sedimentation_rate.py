@@ -26,7 +26,7 @@
 
 # where $sedgrid and $agegrid are your present-day sediment thickness and agegrid.
 
-# note: check lines 269/270 to see if it's calculating rate or thickness...
+# note: check lines 273/274 to see if it's calculating rate or thickness...
 
 # ---
 
@@ -270,7 +270,7 @@ def average_sedimentation_rate(
         if age < 1:
             age = 1
         # Decompact the sediment thickness and divide by ocean floor age.
-        average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay) / age.   # decompacted sediment rate
+        average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay) / age    # decompacted sediment rate
         # average_sedimentation_rate = decompat(thickness, surface_porosity, porosity_exp_decay)        # decompacted sediment thickness
         lon_lat_average_sedimentation_rate_list.append((lon, lat, average_sedimentation_rate))
     
