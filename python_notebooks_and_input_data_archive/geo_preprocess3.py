@@ -22,7 +22,8 @@ class LongFold(_BaseKFold):
     """
     # Initialization
     def __init__(self, n_splits=3, shuffle=False, random_state=None):
-        super(LongFold, self).__init__(n_splits, shuffle, random_state)
+        # super(LongFold, self).__init__(n_splits, shuffle, random_state)
+        super(LongFold, self).__init__(n_splits, shuffle=shuffle, random_state=random_state)
 
     def _iter_test_indices(self, X, y=None, groups=None):
         """
