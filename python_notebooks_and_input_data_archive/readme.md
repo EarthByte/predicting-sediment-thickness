@@ -20,7 +20,7 @@ This is in the `average_sedimentation_rate` function (around lines 273/274).
 
 3. Running `sediment_thick.ipynb` to get the new sediment thickness relationship. 
       * The new parameters are in the last cell (mean/variance/max of age and distance, polynomial coefficients and intercept).
-      * Replace the values in lines 299-307 of [02_generate_predicted_sedimentation_grids.py](/02_generate_predicted_sedimentation_grids.py) with these new parameters. Note that the *age_distance_polynomial_coefficients* is in the form `polynomial intercept, polynomial coefficents[1:-1]` (i.e. replace the first `0` with the polynomial intercept)
+      * Replace the values in lines 302-310 of [02_generate_predicted_sedimentation_grids.py](/02_generate_predicted_sedimentation_grids.py) with these new parameters. Note that the *age_distance_polynomial_coefficients* is in the form `polynomial intercept, polynomial coefficents[1:-1]` (i.e. replace the first `0` with the polynomial intercept)
 4. Running `sediment_rate.ipynb` to get the new sediment rate relationship.
       * The new parameters are in the last cell (mean/variance/max of age and distance, polynomial coefficients and intercept).
-      * Replace the values in lines 233-242 of [02_generate_predicted_sedimentation_grids.py](/02_generate_predicted_sedimentation_grids.py) with these new parameters. Note that the *age_distance_polynomial_coefficients* is in the form `polynomial intercept, polynomial coefficents[1:-1]` (i.e. replace the first `0` with the polynomial intercept)
+      * Replace the values in lines 237-245 of [02_generate_predicted_sedimentation_grids.py](/02_generate_predicted_sedimentation_grids.py) with these new parameters. Note that the *age_distance_polynomial_coefficients* is in the form `polynomial intercept, polynomial coefficents[1:-1]` (i.e. replace the first `0` with the polynomial intercept)
