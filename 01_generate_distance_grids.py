@@ -21,8 +21,10 @@ Outputs:
 """
 
 # ----- set directories and filenames
+output_dir_base = '/Users/nickywright/PostDoc/Projects/STELLAR/paleobathymetry/paleobathymetry_traditional/TRUNK_2022_v2/sediment_thickness_D17'
 
-output_dir = 'distances_1d'
+if not os.path.exists(output_dir_base):
+    os.makedirs(output_dir_base)
 
 
 proximity_features_files = [
@@ -30,32 +32,93 @@ proximity_features_files = [
 ]
 
 # --- lcoation of files on your computer
-data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS'
-
+# DON'T FORGET TO UPDATE ocean_basin_proximity.py!
 # --- agegrids
-age_grid_dir = '%s/Muller_etal_2016_AREPS_Agegrids/Muller_etal_2016_AREPS_Agegrids_v1.17/Muller_etal_2016_AREPS_v1.17_netCDF' % data_dir   # change folder name if needed
-age_grid_filename = 'Muller_etal_2016_AREPS_v1.17_AgeGrid-'    # everything before 'time'
+age_grid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
+age_grid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
 age_grid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
 
 # --- topologies and other files
-topology_dir = '%s' % data_dir
+topology_dir = '/Users/nickywright/repos/usyd/EarthBytePlateMotionModel-ARCHIVE/Global_Model_WD_Internal_Release_2022_v2'
 rotation_filenames = [
-	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir,
+    '%s/Global_250-0Ma_Rotations.rot' % topology_dir,
+    '%s/Global_410-250Ma_Rotations.rot' % topology_dir,
+    '%s/Alps_Mesh_Rotations.rot' % topology_dir,
+    '%s/Andes_Flat_Slabs_Rotations.rot' % topology_dir,
+    '%s/Andes_Rotations.rot' % topology_dir,
+    '%s/Australia_Antarctica_Mesh_Rotations.rot' % topology_dir,
+    '%s/Australia_North_Zealandia_Rotations.rot' % topology_dir,
+    '%s/Eurasia_Arabia_Mesh_Rotations.rot' % topology_dir,
+    '%s/North_America_Flat_Slabs_Rotations.rot' % topology_dir,
+    '%s/North_America_Mesh_Rotations.rot' % topology_dir,
+    '%s/North_China_Mesh_Rotations.rot' % topology_dir,
+    '%s/South_Atlantic_Rotations.rot' % topology_dir,
+    '%s/South_China_DeformingModel.rot' % topology_dir,
+    '%s/Southeast_Asia_Rotations.rot' % topology_dir,
 ]
+
 topology_filenames = [
-	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir,
-	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir,
-]
+    '%s/Alps_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Alps_Mesh_Topologies.gpml' % topology_dir,
+    '%s/America_Anyui_Deforming_Mesh.gpml' % topology_dir,
+    '%s/America_Anyui_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Andes_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Andes_Flat_Slabs_Topologies.gpml' % topology_dir,
+    '%s/Andes_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Arctic_Eurasia_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Arctic_Eurasia_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Australia_Antarctica_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Australia_Antarctica_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Australia_North_Zealandia_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Australia_North_Zealandia_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Baja_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Coral_Sea_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Coral_Sea_Topologies.gpml' % topology_dir,
+    '%s/East_African_Rift_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
+    '%s/East-West_Gondwana_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
+    '%s/Ellesmere_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Eurasia_Arabia_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
+    '%s/Global_Mesozoic-Cenozoic_PlateBoundaries.gpml' % topology_dir,
+    '%s/Global_Paleozoic_PlateBoundaries.gpml' % topology_dir,
+    '%s/Greater_India_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Greater_India_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Inactive_Meshes_and_Topologies.gpml' % topology_dir,
+    '%s/North_America_Mesh_Topologies.gpml' % topology_dir,
+    '%s/North_Atlantic_Deforming_Mesh.gpml' % topology_dir,
+    '%s/North_Atlantic_Mesh_Topologies.gpml' % topology_dir,
+    '%s/North_China_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Northern_Andes_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Northern_Andes_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Papua_New_Guinea_Deforming_Meshes.gpml' % topology_dir,
+    '%s/Papua_New_Guinea_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Scotia_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
+    '%s/Siberia_Eurasia_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Siberia_Eurasia_Mesh_Topologies.gpml' % topology_dir,
+    '%s/South_Atlantic_Deforming_Mesh.gpml' % topology_dir,
+    '%s/South_Atlantic_Mesh_Topologies.gpml' % topology_dir,
+    '%s/South_China_Mesh_Topologies.gpml' % topology_dir,
+    '%s/South_China_DeformingElements.gpml' % topology_dir,
+    '%s/South_Zealandia_Deforming_Mesh.gpml' % topology_dir,
+    '%s/South_Zealandia_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Southeast_Asia_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Southeast_Asia_Mesh_Topologies.gpml' % topology_dir,
+    '%s/West_Antarctic_Zealandia_Deforming_Mesh.gpml' % topology_dir,
+    '%s/West_Antarctica_Zealandia_Mesh_Topologies.gpml' % topology_dir,
+    '%s/Western_North_America_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Western_Tethys_Deforming_Mesh.gpml' % topology_dir,
+    '%s/Western_Tethys_Tectonic_Boundary_Topologies.gpml' % topology_dir]
 
 
 # --- set times and spacing
-grid_spacing = 1.0
+grid_spacing = 0.2
 
 min_time = 0
-max_time = 230
+max_time = 250
 time_step = 1
 
 proximity_threshold_kms = 3000
+
+output_dir = '%s/distances_%sd' % (output_dir_base, grid_spacing)
 
 # -----
 if not os.path.exists(output_dir):
@@ -161,7 +224,7 @@ def low_priority():
 if __name__ == '__main__':
     
     try:
-        num_cpus = multiprocessing.cpu_count()
+        num_cpus = multiprocessing.cpu_count() - 2
     except NotImplementedError:
         num_cpus = 1
     
