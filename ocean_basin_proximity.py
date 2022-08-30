@@ -34,8 +34,8 @@ import shortest_path
 import subprocess
 import sys
 
-data_dir = '/Users/nickywright/repos/usyd/EarthBytePlateMotionModel-ARCHIVE/Global_Model_WD_Internal_Release_2022_v2'
-coastline_filename = '%s/StaticGeometries/Coastlines/Global_coastlines_low_res.shp' % data_dir
+data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
+coastline_filename = '%s/Coastlines/Global_EarthByte_GPlates_PresentDay_Coastlines.gpmlz' % data_dir
 
 USE_SHORTEST_DISTANCE = True
 
