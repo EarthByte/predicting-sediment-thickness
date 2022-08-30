@@ -1,6 +1,15 @@
 # Predicting sediment thickness
 
-Generate compacted sediment thickness and decompacted sediment rate grids for palaeo-times using polynomials of ocean floor age and distance to passive margins.
+Generate **compacted sediment thickness** and **decompacted sediment rate** grids for palaeo-times using polynomials of ocean floor age and distance to passive margins.
+
+## Releases
+### v1.1
+This release contains the sediment thickness workflow with an updated calibration for sediment thickness and rate using [GlobSed](https://ngdc.noaa.gov/mgg/sedthick/) sediment thickness [(Straume et al. 2019)](https://doi.org/10.1029/2018GC008115) and age grid from 'Muller-2019-Young2019-Cao2020' in the [GPlates 2.3 sample data](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/) [(Zahirovic et al. 2021)](https://doi.org/10.1002/gdj3.146)
+
+### v1.0
+This release contains the original sediment thickness workflow from [Dutkiewicz et al. (2017)](https://doi.org/10.1002/2017GC007258).
+The relationship for sedimentation rate and thickness was based on the calibration of the age grid from [Müller et al. (2016)](https://doi.org/10.1146/annurev-earth-060115-012211), and present-day sediment thickness of [Divins (2003)](https://www.ngdc.noaa.gov/mgg/sedthick/sedthick.html), incorporating additions by [Whittaker et al. (2013)](https://doi.org/10.1002/ggge.20181) and [Wobbe et al. (2014)](https://doi.org/10.1016/j.gloplacha.2014.09.006) for the Southern Ocean. 
+
 
 ## Workflow procedure
 
