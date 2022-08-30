@@ -4,7 +4,9 @@ import multiprocessing
 import os, shutil
 import sys
 
-""" This script creates grids (netcdfs) of sediment thickness and sediment rate through time
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+""" ---------- Part 2 of the prediciting-sediment-thickness workflow ----------
+This script creates grids (netcdfs) of sediment thickness and sediment rate through time
 
 Requirements amd Inputs:
     - Python
@@ -25,32 +27,29 @@ Outputs:
       subfolders of sediment thickness and sediment rate grids through time.
 
 2020-02-25: Added comments, created folders within the script itself
+2022-08-26: Update parameters for GlobSed and latest agegrids. Modify dirs to be consistent with pt1
 """
 
-# ----- set directories and filenames
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# ------------------------------------------
+# --- Set paths and various parameters
+# ------------------------------------------
 
-data_dir = '/Users/nickywright/repos/usyd/EarthBytePlateMotionModel-ARCHIVE/Global_Model_WD_Internal_Release_2022_v2'
+output_base_dir = '.'
 
-# age_grid_dir = '/Volumes/nmw2/STELLAR/paleobathymetry_traditional/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
-# agegrid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
-# agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
+# --- distance grids (from part 1)
+distance_grid_dir = '%s/distances_1d' % output_base_dir
+distance_base_name = 'mean_distance_1d'
 
-age_grid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
+# --- output directory name
+sediment_output_sub_dir = 'sedimentation_output'
+
+# --- agegrids
+agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
 agegrid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
 agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
 
-
-
-output_base_dir = '/Users/nickywright/PostDoc/Projects/STELLAR/paleobathymetry/paleobathymetry_traditional/TRUNK_2022_v2/sediment_thickness_D17'
-
-
-distance_grid_dir = '%s/distances_0.2d' % output_base_dir
-distance_base_name = 'mean_distance_0.2d'
-
-# output_base_dir = '/Users/nickywright/PostDoc/Projects/STELLAR/paleobathymetry/paleobathymetry_traditional/TRUNK_2022_v2/sediment_thickness_D17'
-# output_base_dir = '/Volumes/nmw2/STELLAR/paleobathymetry_traditional/TRUNK_2022_v2/sediment_thickness_D17'
-sediment_output_sub_dir = 'sedimentation_output'
-
+# ------------------------------------------
 # --- set times and spacing
 grid_spacing = 0.1
 
@@ -58,7 +57,12 @@ min_time = 0
 max_time = 250
 time_step = 1
 
-# ----- 
+num_cpus = multiprocessing.cpu_count() - 1 # number of cpus to use. Reduce if required!
+
+# ------------------------------------------
+# END USER INPUT
+# ------------------------------------------
+
 # check if the base output directory exists. If it doesn't, create it.
 if not os.path.exists(output_base_dir + '/' + sediment_output_sub_dir):
     print('%s does not exist, creating now... ' % (output_base_dir + '/' + sediment_output_sub_dir))
@@ -89,7 +93,7 @@ def generate_predicted_sedimentation_grid(
             '-d',
             '{0}/{1}_{2}.nc'.format(distance_grid_dir, distance_base_name, time),
             '-g',
-            '{0}/{1}{2}.{3}'.format(age_grid_dir, agegrid_filename, time, agegrid_filename_ext),
+            '{0}/{1}{2}.{3}'.format(agegrid_dir, agegrid_filename, time, agegrid_filename_ext),
             '-i',
             str(grid_spacing),
             '-w',
@@ -177,7 +181,7 @@ def low_priority():
 if __name__ == '__main__':
     
     try:
-        num_cpus = multiprocessing.cpu_count()
+        num_cpus = num_cpus
     except NotImplementedError:
         num_cpus = 1
 

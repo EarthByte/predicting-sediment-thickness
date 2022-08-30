@@ -5,8 +5,9 @@ import multiprocessing
 import os, shutil
 import sys
 
-""" This script creates grids (netcdfs) of the mean distance to passive margins through time
-
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+""" ---------- Part 1 of the predicting-sediment-thickness workflow -----------
+ This script creates grids (netcdfs) of the mean distance to passive margins through time
 
 Requirements & Inputs:
     - Python  
@@ -18,99 +19,41 @@ Outputs:
     - directory named 'distances_1d', with mean distance grids (in metres) through time.
 
 2020-02-14: Added comments, removed hardcoded names (for rotation file, etc) from definitions
+2022-08-29: Added more comments (NW)
 """
 
-# ----- set directories and filenames
-output_dir_base = '/Users/nickywright/PostDoc/Projects/STELLAR/paleobathymetry/paleobathymetry_traditional/TRUNK_2022_v2/sediment_thickness_D17'
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# ------------------------------------------
+# --- Set paths and various parameters
+# ------------------------------------------
 
-if not os.path.exists(output_dir_base):
-    os.makedirs(output_dir_base)
+output_base_dir = '.'
 
-
+# ------------------------------------------
+# --- input files
 proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
 ]
 
-# --- lcoation of files on your computer
+# --- lcoation of gplates files on your computer
 # DON'T FORGET TO UPDATE ocean_basin_proximity.py!
-# --- agegrids
-age_grid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
-age_grid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
-age_grid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
+# --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
+agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
+agegrid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
+agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
 
 # --- topologies and other files
-topology_dir = '/Users/nickywright/repos/usyd/EarthBytePlateMotionModel-ARCHIVE/Global_Model_WD_Internal_Release_2022_v2'
+data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
 rotation_filenames = [
-    '%s/Global_250-0Ma_Rotations.rot' % topology_dir,
-    '%s/Global_410-250Ma_Rotations.rot' % topology_dir,
-    '%s/Alps_Mesh_Rotations.rot' % topology_dir,
-    '%s/Andes_Flat_Slabs_Rotations.rot' % topology_dir,
-    '%s/Andes_Rotations.rot' % topology_dir,
-    '%s/Australia_Antarctica_Mesh_Rotations.rot' % topology_dir,
-    '%s/Australia_North_Zealandia_Rotations.rot' % topology_dir,
-    '%s/Eurasia_Arabia_Mesh_Rotations.rot' % topology_dir,
-    '%s/North_America_Flat_Slabs_Rotations.rot' % topology_dir,
-    '%s/North_America_Mesh_Rotations.rot' % topology_dir,
-    '%s/North_China_Mesh_Rotations.rot' % topology_dir,
-    '%s/South_Atlantic_Rotations.rot' % topology_dir,
-    '%s/South_China_DeformingModel.rot' % topology_dir,
-    '%s/Southeast_Asia_Rotations.rot' % topology_dir,
-]
+    '%s/Rotations/Muller2019-Young2019-Cao2020_CombinedRotations.rot' % data_dir]
 
 topology_filenames = [
-    '%s/Alps_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Alps_Mesh_Topologies.gpml' % topology_dir,
-    '%s/America_Anyui_Deforming_Mesh.gpml' % topology_dir,
-    '%s/America_Anyui_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Andes_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Andes_Flat_Slabs_Topologies.gpml' % topology_dir,
-    '%s/Andes_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Arctic_Eurasia_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Arctic_Eurasia_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Australia_Antarctica_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Australia_Antarctica_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Australia_North_Zealandia_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Australia_North_Zealandia_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Baja_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Coral_Sea_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Coral_Sea_Topologies.gpml' % topology_dir,
-    '%s/East_African_Rift_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
-    '%s/East-West_Gondwana_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
-    '%s/Ellesmere_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Eurasia_Arabia_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
-    '%s/Global_Mesozoic-Cenozoic_PlateBoundaries.gpml' % topology_dir,
-    '%s/Global_Paleozoic_PlateBoundaries.gpml' % topology_dir,
-    '%s/Greater_India_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Greater_India_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Inactive_Meshes_and_Topologies.gpml' % topology_dir,
-    '%s/North_America_Mesh_Topologies.gpml' % topology_dir,
-    '%s/North_Atlantic_Deforming_Mesh.gpml' % topology_dir,
-    '%s/North_Atlantic_Mesh_Topologies.gpml' % topology_dir,
-    '%s/North_China_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Northern_Andes_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Northern_Andes_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Papua_New_Guinea_Deforming_Meshes.gpml' % topology_dir,
-    '%s/Papua_New_Guinea_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Scotia_Deforming_Mesh_and_Topologies.gpml' % topology_dir,
-    '%s/Siberia_Eurasia_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Siberia_Eurasia_Mesh_Topologies.gpml' % topology_dir,
-    '%s/South_Atlantic_Deforming_Mesh.gpml' % topology_dir,
-    '%s/South_Atlantic_Mesh_Topologies.gpml' % topology_dir,
-    '%s/South_China_Mesh_Topologies.gpml' % topology_dir,
-    '%s/South_China_DeformingElements.gpml' % topology_dir,
-    '%s/South_Zealandia_Deforming_Mesh.gpml' % topology_dir,
-    '%s/South_Zealandia_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Southeast_Asia_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Southeast_Asia_Mesh_Topologies.gpml' % topology_dir,
-    '%s/West_Antarctic_Zealandia_Deforming_Mesh.gpml' % topology_dir,
-    '%s/West_Antarctica_Zealandia_Mesh_Topologies.gpml' % topology_dir,
-    '%s/Western_North_America_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Western_Tethys_Deforming_Mesh.gpml' % topology_dir,
-    '%s/Western_Tethys_Tectonic_Boundary_Topologies.gpml' % topology_dir]
+    '%s/DynamicPolygons/Muller2019-Young2019-Cao2020_PlateBoundaries.gpmlz' % data_dir,
+    '%s/DeformingLithosphere/Muller2019-Young2019-Cao2020_ActiveDeformation.gpmlz' % data_dir]
 
-
+# ------------------------------------------
 # --- set times and spacing
-grid_spacing = 0.2
+grid_spacing = 1
 
 min_time = 0
 max_time = 250
@@ -118,9 +61,20 @@ time_step = 1
 
 proximity_threshold_kms = 3000
 
-output_dir = '%s/distances_%sd' % (output_dir_base, grid_spacing)
+output_dir = '%s/distances_%sd' % (output_base_dir, grid_spacing)
+
+num_cpus = multiprocessing.cpu_count() - 1 # number of cpus to use. Reduce if required!
+
+# ------------------------------------------
+# END USER INPUT
+# ------------------------------------------
 
 # -----
+# make needed directories
+if not os.path.exists(output_base_dir):
+    os.makedirs(output_base_dir)
+
+
 if not os.path.exists(output_dir):
     print('%s does not exist, creating now... ' % output_dir)
     os.mkdir(output_dir)
@@ -140,7 +94,7 @@ def generate_distance_grid(time):
     command_line.extend('{0}'.format(topology_filename) for topology_filename in topology_filenames)
     command_line.extend([
             '-g',
-            '{0}/{1}{2}.{3}'.format(age_grid_dir, age_grid_filename, time, age_grid_filename_ext),
+            '{0}/{1}{2}.{3}'.format(agegrid_dir, agegrid_filename, time, agegrid_filename_ext),
             '-y {0}'.format(time),
             '-n',
             # Use all feature types in proximity file (according to Dietmar)...
@@ -224,7 +178,7 @@ def low_priority():
 if __name__ == '__main__':
     
     try:
-        num_cpus = multiprocessing.cpu_count() - 2
+        num_cpus = num_cpus
     except NotImplementedError:
         num_cpus = 1
     
