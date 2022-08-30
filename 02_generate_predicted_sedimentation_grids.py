@@ -4,7 +4,9 @@ import multiprocessing
 import os, shutil
 import sys
 
-""" This script creates grids (netcdfs) of sediment thickness and sediment rate through time
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+""" ---------- Part 2 of the prediciting-sediment-thickness workflow ----------
+This script creates grids (netcdfs) of sediment thickness and sediment rate through time
 
 Requirements amd Inputs:
     - Python
@@ -25,31 +27,42 @@ Outputs:
       subfolders of sediment thickness and sediment rate grids through time.
 
 2020-02-25: Added comments, created folders within the script itself
+2022-08-26: Update parameters for GlobSed and latest agegrids. Modify dirs to be consistent with pt1
 """
 
-# ----- set directories and filenames
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# ------------------------------------------
+# --- Set paths and various parameters
+# ------------------------------------------
 
-data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS'
-age_grid_dir = '%s/Muller_etal_2016_AREPS_Agegrids/Muller_etal_2016_AREPS_Agegrids_v1.17/Muller_etal_2016_AREPS_v1.17_netCDF' % data_dir
+output_base_dir = '.'
 
-agegrid_filename = 'Muller_etal_2016_AREPS_v1.17_AgeGrid-'  # everything before 'time'
-agegrid_filename_ext = 'nc'
+# --- distance grids (from part 1)
+distance_grid_dir = '%s/distances_1d' % output_base_dir
+distance_base_name = 'mean_distance_1d'
 
-
-distance_grid_dir = 'distances_1d'
-distance_base_name = 'mean_distance_1.0d'
-
-output_base_dir = '/home/michael/workspace/predicting-sediment-thickness'
+# --- output directory name
 sediment_output_sub_dir = 'sedimentation_output'
 
+# --- agegrids
+agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
+agegrid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
+agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
+
+# ------------------------------------------
 # --- set times and spacing
-grid_spacing = 0.2
+grid_spacing = 0.1
 
 min_time = 0
-max_time = 230
+max_time = 250
 time_step = 1
 
-# ----- 
+num_cpus = multiprocessing.cpu_count() - 1 # number of cpus to use. Reduce if required!
+
+# ------------------------------------------
+# END USER INPUT
+# ------------------------------------------
+
 # check if the base output directory exists. If it doesn't, create it.
 if not os.path.exists(output_base_dir + '/' + sediment_output_sub_dir):
     print('%s does not exist, creating now... ' % (output_base_dir + '/' + sediment_output_sub_dir))
@@ -80,7 +93,7 @@ def generate_predicted_sedimentation_grid(
             '-d',
             '{0}/{1}_{2}.nc'.format(distance_grid_dir, distance_base_name, time),
             '-g',
-            '{0}/{1}{2}.{3}'.format(age_grid_dir, agegrid_filename, time, agegrid_filename_ext),
+            '{0}/{1}{2}.{3}'.format(agegrid_dir, agegrid_filename, time, agegrid_filename_ext),
             '-i',
             str(grid_spacing),
             '-w',
@@ -168,7 +181,7 @@ def low_priority():
 if __name__ == '__main__':
     
     try:
-        num_cpus = multiprocessing.cpu_count()
+        num_cpus = num_cpus
     except NotImplementedError:
         num_cpus = 1
 
@@ -217,17 +230,20 @@ if __name__ == '__main__':
     #     print('Polynomial feature names:', regressor.named_steps['poly'].get_feature_names())
     #
     #
+
+    # updated for GlobSed and TRUNK agegrids
     predict_sedimentation_script = 'predict_sedimentation_rate.py'
     #scale_sedimentation_rate = 1.0  # Keep predicted rate in (cm/Ky).
     scale_sedimentation_rate = 10.0  # Scale predicted rate (cm/Ky) to (m/My).
-    mean_age = 61.45090081
-    mean_distance = 1828.27150101
-    variance_age =  1970.24537854
-    variance_distance = 1213531.02057604
-    max_age = 206.88276672
+    mean_age = 61.17716597
+    mean_distance = 1835.10750592
+    variance_age =  1934.78513885
+    variance_distance = 1207587.8548734
+    max_age = 191.87276
     max_distance = 3000.
     age_distance_polynomial_coefficients = [
-            1.3757381318064446, -0.32271631, -0.10326943,  0.35609403, -0.17139341,    0.        , -0.08800471,  0.04551093, -0.01790009, -0.47805069]
+            1.350082937086441, -0.26385415, -0.07516542,  0.39197707, -0.15475392,
+        0.        , -0.13196083,  0.02481208, -0.        , -0.47570021]
     
     output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_rate'
     
@@ -280,16 +296,19 @@ if __name__ == '__main__':
     #     print('Polynomial feature names:', regressor.named_steps['poly'].get_feature_names())
     #
     #
+
+    # updated for GlobSed and TRUNK agegrids (NW 20220826)
     predict_sedimentation_script = 'predict_sediment_thickness.py'
     scale_sedimentation_rate = None  # No scaling - we're predicting sediment thickness (not rate).
-    mean_age =  61.45473054
-    mean_distance = 1828.56033082
-    variance_age = 1969.66845378
-    variance_distance = 1213348.68588578
-    max_age = 206.88276672
+    mean_age =  61.18406823
+    mean_distance = 1835.28118479
+    variance_age = 1934.6999014
+    variance_distance = 1207521.8995806
+    max_age = 191.87276
     max_distance = 3000.
     age_distance_polynomial_coefficients = [
-            5.458863944268268, 0.45435012, -0.08694418, -0.26274333, -0.11545711, 0.00911016,  0.08546976,  0.02393832,  0.        , -0.40411004]
+            5.441401190368497,  0.46893096, -0.07320928, -0.24077496, -0.10840657,
+        0.00381672,  0.06831728,  0.01179914,  0.01158149, -0.39880562]
     
     output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_thickness'
 

@@ -5,8 +5,9 @@ import multiprocessing
 import os, shutil
 import sys
 
-""" This script creates grids (netcdfs) of the mean distance to passive margins through time
-
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+""" ---------- Part 1 of the predicting-sediment-thickness workflow -----------
+ This script creates grids (netcdfs) of the mean distance to passive margins through time
 
 Requirements & Inputs:
     - Python  
@@ -18,46 +19,62 @@ Outputs:
     - directory named 'distances_1d', with mean distance grids (in metres) through time.
 
 2020-02-14: Added comments, removed hardcoded names (for rotation file, etc) from definitions
+2022-08-29: Added more comments (NW)
 """
 
-# ----- set directories and filenames
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# ------------------------------------------
+# --- Set paths and various parameters
+# ------------------------------------------
 
-output_dir = 'distances_1d'
+output_base_dir = '.'
 
-
+# ------------------------------------------
+# --- input files
 proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
 ]
 
-# --- lcoation of files on your computer
-data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS'
-
-# --- agegrids
-age_grid_dir = '%s/Muller_etal_2016_AREPS_Agegrids/Muller_etal_2016_AREPS_Agegrids_v1.17/Muller_etal_2016_AREPS_v1.17_netCDF' % data_dir   # change folder name if needed
-age_grid_filename = 'Muller_etal_2016_AREPS_v1.17_AgeGrid-'    # everything before 'time'
-age_grid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
+# --- lcoation of gplates files on your computer
+# DON'T FORGET TO UPDATE ocean_basin_proximity.py!
+# --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
+agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
+agegrid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
+agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
 
 # --- topologies and other files
-topology_dir = '%s' % data_dir
+data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
 rotation_filenames = [
-	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS.rot' % topology_dir,
-]
+    '%s/Rotations/Muller2019-Young2019-Cao2020_CombinedRotations.rot' % data_dir]
+
 topology_filenames = [
-	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS_PlateBoundaries.gpml' % topology_dir,
-	'%s/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17/Global_EarthByte_230-0Ma_GK07_AREPS_Topology_BuildingBlocks.gpml' % topology_dir,
-]
+    '%s/DynamicPolygons/Muller2019-Young2019-Cao2020_PlateBoundaries.gpmlz' % data_dir,
+    '%s/DeformingLithosphere/Muller2019-Young2019-Cao2020_ActiveDeformation.gpmlz' % data_dir]
 
-
+# ------------------------------------------
 # --- set times and spacing
-grid_spacing = 1.0
+grid_spacing = 1
 
 min_time = 0
-max_time = 230
+max_time = 250
 time_step = 1
 
 proximity_threshold_kms = 3000
 
+output_dir = '%s/distances_%sd' % (output_base_dir, grid_spacing)
+
+num_cpus = multiprocessing.cpu_count() - 1 # number of cpus to use. Reduce if required!
+
+# ------------------------------------------
+# END USER INPUT
+# ------------------------------------------
+
 # -----
+# make needed directories
+if not os.path.exists(output_base_dir):
+    os.makedirs(output_base_dir)
+
+
 if not os.path.exists(output_dir):
     print('%s does not exist, creating now... ' % output_dir)
     os.mkdir(output_dir)
@@ -77,7 +94,7 @@ def generate_distance_grid(time):
     command_line.extend('{0}'.format(topology_filename) for topology_filename in topology_filenames)
     command_line.extend([
             '-g',
-            '{0}/{1}{2}.{3}'.format(age_grid_dir, age_grid_filename, time, age_grid_filename_ext),
+            '{0}/{1}{2}.{3}'.format(agegrid_dir, agegrid_filename, time, agegrid_filename_ext),
             '-y {0}'.format(time),
             '-n',
             # Use all feature types in proximity file (according to Dietmar)...
@@ -161,7 +178,7 @@ def low_priority():
 if __name__ == '__main__':
     
     try:
-        num_cpus = multiprocessing.cpu_count()
+        num_cpus = num_cpus
     except NotImplementedError:
         num_cpus = 1
     

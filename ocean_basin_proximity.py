@@ -34,8 +34,8 @@ import shortest_path
 import subprocess
 import sys
 
-data_dir = '/home/michael/workspace/predicting-sediment-thickness/Muller_etal_2016_AREPS/Muller_etal_2016_AREPS_Supplement/Muller_etal_2016_AREPS_Supplement_v1.17'
-coastline_filename = '%s/Global_EarthByte_230-0Ma_GK07_AREPS_Coastlines.gpml' % data_dir
+data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
+coastline_filename = '%s/Coastlines/Global_EarthByte_GPlates_PresentDay_Coastlines.gpmlz' % data_dir
 
 USE_SHORTEST_DISTANCE = True
 
