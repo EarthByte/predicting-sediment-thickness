@@ -1,6 +1,8 @@
 # Predicting sediment thickness
 
-Generate **compacted sediment thickness** and **decompacted sediment rate** grids for palaeo-times using polynomials of ocean floor age and distance to passive margins.
+This workflow generates **compacted sediment thickness** and **decompacted sediment rate** grids for palaeo-times using polynomials of ocean floor age and distance to passive margins. The polynomial relationship is calibrated to present day and can be updated with new datasets if needed (see [below](#calculating-the-relationships-for-sedimentation-rate-and-thickness) for more information).
+
+To generate sediment thickness and rate grids through time, all that is required is a GPlates-compatible plate motion model (specifically: rotation file(s), topology (or dynamic polgyon) file(s), and a coastline file), and their corresponding paleo-age grids. The latest plate model and time-evolving seafloor age grids can be downloaded [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
 
 ## Releases
 ### v1.1
@@ -13,37 +15,41 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 
 ## Workflow procedure
 
-- Download the age grids (0-230Ma) and associated topologies, e.g. from the webdav folder https://www.earthbyte.org/webdav/ftp/Data_Collections/Muller_etal_2016_AREPS/ (Google how to connect to a webdav folder. It is nice and easy) or if you prefer the old FTP protocal ftp://ftp.earthbyte.org/Data_Collections/Muller_etal_2016_AREPS/ 
-- Open the *01_generate_distance_grids.py* script and:
-    + Set the *data_dir* variable to the location of all your files (agegrids, topologies, etc)
-    + Set the *age_grid_dir* variable to the location of the downloaded age grids *netCDF_0-230Ma* directory. Replace directory name if needed.
-    + Set the *age_grid_filename* and *age_grid_filename_ext* to correspond to the filename of the agegrids themselves, and the extension.
-    + Set the *topology_dir* variable to the location of the downloaded topologies *Muller_etal_AREPS_Supplement* directory.
-    + Set the *rotation_filenames* and *topology_filenames* to match those in the topology_dir.
-    + Set the *grid_spacing* variable to 1 (degree):
+- Download paleo-age grids and associated topologies.
+    - The latest plate model and paleo-age grids can be downloaded from [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
+    - Alternatively, Müller et al. (2016; AREPS) can be downloaded from https://www.earthbyte.org/webdav/ftp/Data_Collections/Muller_etal_2016_AREPS/
+- Open the `01_generate_distance_grids.py` script and:
+    + Set the `data_dir` variable to the location of all your files (agegrids, topologies, etc)
+    + Set the `agegrid_dir` variable to the location of the downloaded age grids.
+    + Set the `agegrid_filename` and `agegrid_filename_ext` to correspond to the filename of the agegrids themselves, and the extension.
+    + Set the `topology_dir` variable to the location of the downloaded topologies.
+    + Set the `rotation_filenames` and `topology_filenames` to match those in the topology_dir.
+    + Set the `grid_spacing` variable to your desired spacing in degrees, e.g.  1:
          * This takes about 8 hours on a 6-core (12-thread) system.
     + Open the script *ocean_basin_proximity.py* and set the *data_dir* and *coastline_filename* to match those in the model you're using.
 - Run the Python script:
       `python 01_generate_distance_grids.py`
-- The script outputs mean distance grids:
-    + Have units in metres.
-    + Are located in *distances_1d*. (or what you've named your output folder)
-- Open the *02_generate_predicted_sedimentation_grids.py* script and:
-    + Set the *age_grid_dir* variable to the location of the downloaded age grids *netCDF_0-230Ma* directory.
-    + Set the *distance_grid_dir* variable to the location of the generated distance grids (1 degree):
-        * Currently this is *distances_1d*.
-    + Specify the grid spacing and time range variables:
+    + The script outputs mean distance grids:
+        + Have units in metres.
+        + Are located in *distances_${grid_spacing}d*. (or what you've named your output folder)
+    
+    
+- Open the `02_generate_predicted_sedimentation_grids.py` script and:
+    + Set the `agegrid_dir`, `agegrid_filename`, and agegrid_filename_ext` variables to correspond to the paleo-age grids directory.
+    + Set the `distance_grid_dir` variable to the location of the generated distance grids from part 1.
+    + Specify the `grid_spacing` and time range variables:
         * Using 32-bit Python on Windows, the lowest grid spacing is 0.2 degrees (going lower will run out of memory):
           ^ This happens when using 32-bit pyGPlates - see http://www.gplates.org/docs/pygplates/pygplates_getting_started.html#using-the-correct-python-version
         * On 64-bit Mac and Linux you can go lower since pyGPlates (and hence Python) is 64-bit.
 - Run the Python script:
     `python 02_generate_predicted_sedimentation_grids.py`
-- The script outputs predicted sedimentation rate grids:
-    + Have units *cm/Ky* (not *m/My*).
-    + Are located in *sedimentation_output/predicted_rate*.
-- The script also outputs predicted sediment thickness grids:
-    + Have units in metres.
-    + Are located in *sedimentation_output/predicted_thickness*.
+    + The script outputs predicted decompacted sedimentation rate grids:
+        + Have units *cm/Ky* (not *m/My*).
+        + Are located in *sedimentation_output/predicted_rate*.
+    - The script also outputs predicted compacted sediment thickness grids:
+        + Have units in metres.
+        + Are located in *sedimentation_output/predicted_thickness*.
+
 
 ## Calculating the relationships for sedimentation rate and thickness
 The scripts to calculate the sedimentation rate and thickness relationships are in the folder `python_notebooks_and_input_data_archive`.
