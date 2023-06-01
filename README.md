@@ -2,7 +2,7 @@
 
 This workflow generates **compacted sediment thickness** and **decompacted sediment rate** grids for palaeo-times using polynomials of ocean floor age and distance to passive margins. The polynomial relationship is calibrated to present day and can be updated with new datasets if needed (see [below](#calculating-the-relationships-for-sedimentation-rate-and-thickness) for more information).
 
-To generate sediment thickness and rate grids through time, all that is required is a GPlates-compatible plate motion model (specifically: rotation file(s), topology (or dynamic polgyon) file(s), and a coastline file), and their corresponding paleo-age grids. The latest plate model and time-evolving seafloor age grids can be downloaded [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
+To generate sediment thickness and rate grids through time, all that is required is a GPlates-compatible plate motion model (specifically: rotation file(s), topology (or dynamic polgyon) file(s), and passive continental margin locations (COBs), and corresponding paleo-age grids. The latest plate model and time-evolving seafloor age grids can be downloaded [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
 
 ## Releases
 ### v1.1
