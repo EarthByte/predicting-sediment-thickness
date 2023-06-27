@@ -4,6 +4,11 @@ This workflow generates **compacted sediment thickness** and **decompacted sedim
 
 To generate sediment thickness and rate grids through time, all that is required is a GPlates-compatible plate motion model (specifically: rotation file(s), topology (or dynamic polgyon) file(s), and passive continental margin locations (COBs), and corresponding paleo-age grids. The latest plate model and time-evolving seafloor age grids can be downloaded [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
 
+## Dependencies
+
+You'll also need to install the following Python dependencies:
+* [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools)
+
 ## Releases
 ### v1.1
 This release contains the sediment thickness workflow with an updated calibration for sediment thickness and rate using [GlobSed](https://ngdc.noaa.gov/mgg/sedthick/) sediment thickness [(Straume et al. 2019)](https://doi.org/10.1029/2018GC008115) and age grid from 'Muller-2019-Young2019-Cao2020' in the [GPlates 2.3 sample data](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/) [(Zahirovic et al. 2022)](https://doi.org/10.1002/gdj3.146)
@@ -37,10 +42,7 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 - Open the `02_generate_predicted_sedimentation_grids.py` script and:
     + Set the `agegrid_dir`, `agegrid_filename`, and agegrid_filename_ext` variables to correspond to the paleo-age grids directory.
     + Set the `distance_grid_dir` variable to the location of the generated distance grids from part 1.
-    + Specify the `grid_spacing` and time range variables:
-        * Using 32-bit Python on Windows, the lowest grid spacing is 0.2 degrees (going lower will run out of memory):
-          ^ This happens when using 32-bit pyGPlates - see http://www.gplates.org/docs/pygplates/pygplates_getting_started.html#using-the-correct-python-version
-        * On 64-bit Mac and Linux you can go lower since pyGPlates (and hence Python) is 64-bit.
+    + Specify the `grid_spacing` and time range variables.
 - Run the Python script:
     `python 02_generate_predicted_sedimentation_grids.py`
     + The script outputs predicted decompacted sedimentation rate grids:
