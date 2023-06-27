@@ -122,8 +122,8 @@ def get_positions_and_ages(input_points, age_grid_filename):
     
     stdout_data = call_system_command(
             # The command-line strings to execute GMT 'grdtrack'...
-            ["gmt", "grdtrack", "-nl", "-G{0}".format(age_grid_filename)],
-            stdin=input_points_data.encode('utf-8'),
+            ["gmt", "grdtrack", "-G{0}".format(age_grid_filename)],
+            stdin=input_points_data,
             return_stdout=True)
     
     #print('Stdout: {0}'.format(stdout_data))
@@ -132,7 +132,7 @@ def get_positions_and_ages(input_points, age_grid_filename):
     
     # Read lon, lat and age values from the output of 'grdtrack'.
     for line in stdout_data.splitlines():
-        if line.strip().startswith(b'#'):
+        if line.strip().startswith('#'):
             continue
         
         line_data = line.split()
@@ -976,6 +976,8 @@ def write_proximity_data(
 
 
 if __name__ == '__main__':
+    
+    import traceback
     
     __description__ = \
     """Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.

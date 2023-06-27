@@ -100,7 +100,7 @@ def get_positions_and_scalars(input_points, scalar_grid_filename):
     input_points_data = ''.join('{0} {1}\n'.format(lon, lat) for lon, lat in input_points)
 
     # The command-line strings to execute GMT 'grdtrack'.
-    grdtrack_command_line = ["gmt", "grdtrack", "-nl", "-G{0}".format(scalar_grid_filename)]
+    grdtrack_command_line = ["gmt", "grdtrack", "-G{0}".format(scalar_grid_filename)]
     
     try:
         # Use the GMT 'grdtrack' command to sample the scalar grid at the input point locations.

@@ -96,14 +96,14 @@ def get_positions_and_scalars(input_points, scalar_grid_filename, max_scalar=Non
     input_points_data = ''.join('{0} {1}\n'.format(lon, lat) for lon, lat in input_points)
 
     # The command-line strings to execute GMT 'grdtrack'.
-    grdtrack_command_line = ["gmt", "grdtrack", "-nl", "-G{0}".format(scalar_grid_filename)]
-    stdout_data = call_system_command(grdtrack_command_line, stdin=input_points_data.encode('utf-8'), return_stdout=True)
+    grdtrack_command_line = ["gmt", "grdtrack", "-G{0}".format(scalar_grid_filename)]
+    stdout_data = call_system_command(grdtrack_command_line, stdin=input_points_data, return_stdout=True)
     
     lon_lat_scalar_list = []
     
     # Read lon, lat and scalar values from the output of 'grdtrack'.
     for line in stdout_data.splitlines():
-        if line.strip().startswith(b'#'):
+        if line.strip().startswith('#'):
             continue
         
         line_data = line.split()
