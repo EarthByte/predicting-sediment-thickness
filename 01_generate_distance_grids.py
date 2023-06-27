@@ -82,7 +82,7 @@ if not os.path.exists(output_dir):
 # ----- 
 def generate_distance_grid(time):
     py_cmd='python3'
-    if shutil.which('python3') is None:
+    if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
         py_cmd = 'python'
     
     command_line = [py_cmd, 'ocean_basin_proximity.py']

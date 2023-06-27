@@ -83,10 +83,10 @@ def generate_predicted_sedimentation_grid(
         age_distance_polynomial_coefficients,
         output_dir):
     
-    
     py_cmd='python3'
-    if shutil.which('python3') is None:
+    if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
         py_cmd = 'python'
+    
     command_line = [
             py_cmd,
             predict_sedimentation_script,
