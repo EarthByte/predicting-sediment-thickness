@@ -57,7 +57,11 @@ min_time = 0
 max_time = 250
 time_step = 1
 
-num_cpus = multiprocessing.cpu_count() - 1 # number of cpus to use. Reduce if required!
+# Number of cpus to use. Reduce if required!
+try:
+    num_cpus = multiprocessing.cpu_count()  # use all cpus
+except NotImplementedError:
+    num_cpus = 1
 
 # ------------------------------------------
 # END USER INPUT
@@ -179,11 +183,6 @@ def low_priority():
 
 
 if __name__ == '__main__':
-    
-    try:
-        num_cpus = num_cpus
-    except NotImplementedError:
-        num_cpus = 1
 
     # Machine learning training parameters.
     # These come from the "sediment_rate_decomp" IPython notebook (using sklearn Python module).

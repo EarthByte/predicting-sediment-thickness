@@ -63,7 +63,11 @@ proximity_threshold_kms = 3000
 
 output_dir = '%s/distances_%sd' % (output_base_dir, grid_spacing)
 
-num_cpus = multiprocessing.cpu_count() - 1 # number of cpus to use. Reduce if required!
+# Number of cpus to use. Reduce if required!
+try:
+    num_cpus = multiprocessing.cpu_count()  # use all cpus
+except NotImplementedError:
+    num_cpus = 1
 
 # ------------------------------------------
 # END USER INPUT
@@ -177,13 +181,8 @@ def low_priority():
 
 if __name__ == '__main__':
     
-    try:
-        num_cpus = num_cpus
-    except NotImplementedError:
-        num_cpus = 1
-    
     print('Generating distance grids...')
-    
+
     # Split the workload across the CPUs.
     pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
     pool_map_async_result = pool.map_async(
