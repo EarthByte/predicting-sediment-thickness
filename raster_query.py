@@ -27,10 +27,10 @@
 
 
 import argparse
-from call_system_command import call_system_command
+from ptt.utils.call_system_command import call_system_command
 import math
-import points_spatial_tree
-import proximity_query
+import ptt.utils.points_spatial_tree as points_spatial_tree
+import ptt.utils.proximity_query as proximity_query
 import pygplates
 import sys
 

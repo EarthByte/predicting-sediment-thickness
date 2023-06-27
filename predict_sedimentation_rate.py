@@ -24,7 +24,7 @@
 
 
 import argparse
-from call_system_command import call_system_command
+from ptt.utils.call_system_command import call_system_command
 import math
 import sys
 

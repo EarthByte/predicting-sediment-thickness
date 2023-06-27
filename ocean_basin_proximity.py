@@ -24,11 +24,11 @@
 
 
 import argparse
-from call_system_command import call_system_command
+from ptt.utils.call_system_command import call_system_command
 import math
 import multiprocessing
-import points_in_polygons
-import proximity_query
+import ptt.utils.points_in_polygons as points_in_polygons
+import ptt.utils.proximity_query as proximity_query
 import pygplates
 import shortest_path
 import subprocess
