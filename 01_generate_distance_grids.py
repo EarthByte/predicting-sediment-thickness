@@ -63,11 +63,15 @@ proximity_threshold_kms = 3000
 
 output_dir = '%s/distances_%sd' % (output_base_dir, grid_spacing)
 
-# Number of cpus to use. Reduce if required!
-try:
-    num_cpus = multiprocessing.cpu_count()  # use all cpus
-except NotImplementedError:
-    num_cpus = 1
+# Use all CPUs.
+#
+# If False then use a single CPU.
+# If True then use all CPUs (cores).
+# If a positive integer then use that specific number of CPUs (cores).
+#
+#use_all_cpus = False
+#use_all_cpus = 4
+use_all_cpus = True
 
 # ------------------------------------------
 # END USER INPUT
@@ -186,19 +190,40 @@ if __name__ == '__main__':
     
     print('Generating distance grids...')
 
-    # Split the workload across the CPUs.
-    pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-    pool_map_async_result = pool.map_async(
-            generate_distance_grid_parallel_pool_function,
-            (
-                (
-                    time,
-                ) for time in range(min_time, max_time + 1, time_step)
-                #) for time in range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
-            ),
-            1) # chunksize
+    times = range(min_time, max_time + 1, time_step)
+    #times = range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
 
-    # Apparently if we use pool.map_async instead of pool.map and then get the results
-    # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-    # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-    pool_map_async_result.get(99999)
+    if use_all_cpus:
+    
+        # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
+        if isinstance(use_all_cpus, bool):
+            try:
+                num_cpus = multiprocessing.cpu_count()
+            except NotImplementedError:
+                num_cpus = 1
+        # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
+        elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
+            num_cpus = use_all_cpus
+        else:
+            raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
+        
+        # Split the workload across the CPUs.
+        pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
+        pool_map_async_result = pool.map_async(
+                generate_distance_grid_parallel_pool_function,
+                (
+                    (
+                        time,
+                    ) for time in range(min_time, max_time + 1, time_step)
+                    #) for time in range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
+                ),
+                1) # chunksize
+
+        # Apparently if we use pool.map_async instead of pool.map and then get the results
+        # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+        # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+        pool_map_async_result.get(99999)
+
+    else:
+        for time in times:
+            generate_distance_grid(time)
