@@ -341,16 +341,14 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
 
 # Class to calculate and re-use stage rotation calculations.
 class StageRotationCache(object):
-    def __init__(self, rotation_model, anchor_plate_id):
+    def __init__(self, rotation_model):
         self.rotation_model = rotation_model
-        self.anchor_plate_id = anchor_plate_id
         self.stage_rotation_dict = {}
     
     def get_stage_rotation(self, plate_id, time, time_increment):
         stage_rotation = self.stage_rotation_dict.get((plate_id, time, time_increment))
         if not stage_rotation:
-            stage_rotation = self.rotation_model.get_rotation(
-                    time + time_increment, plate_id, time, anchor_plate_id=self.anchor_plate_id)
+            stage_rotation = self.rotation_model.get_rotation(time + time_increment, plate_id, time)
             # Cache for next time.
             self.stage_rotation_dict[(plate_id, time, time_increment)] = stage_rotation
         
@@ -481,7 +479,7 @@ def proximity(
         ocean_basin_point_infos.append(
                 ((lon, lat), age_grid_paleo_time + age, pygplates.PointOnSphere(lat, lon)))
     
-    rotation_model = pygplates.RotationModel(rotation_filenames)
+    rotation_model = pygplates.RotationModel(rotation_filenames, default_anchor_plate_id=anchor_plate_id)
     
     # Read/parse the proximity features once so we're not doing at each time iteration.
     proximity_features = pygplates.FeaturesFunctionArgument(proximity_filenames).get_features()
@@ -503,7 +501,7 @@ def proximity(
     
     topology_reconstruction_features = pygplates.FeaturesFunctionArgument(topological_reconstruction_filenames).get_features()
     
-    stage_rotation_cache = StageRotationCache(rotation_model, anchor_plate_id)
+    stage_rotation_cache = StageRotationCache(rotation_model)
     
     if output_mean_distance or output_standard_deviation_distance:
         # Create a dictionary mapping each ocean basin point (lat/lon position) to its proximity statistics.
@@ -563,7 +561,7 @@ def proximity(
             # We generate both the resolved topology boundaries and the boundary sections between them.
             proximity_resolved_topologies = []
             proximity_shared_boundary_sections = []
-            pygplates.resolve_topologies(proximity_features, rotation_model, proximity_resolved_topologies, time, proximity_shared_boundary_sections, anchor_plate_id)
+            pygplates.resolve_topologies(proximity_features, rotation_model, proximity_resolved_topologies, time, proximity_shared_boundary_sections)
             
             # 'output_all_proximity_distances' is required to be False for topological proximity features.
             proximity_reconstructed_geometry_proxies = None
@@ -586,7 +584,7 @@ def proximity(
             
             # Reconstruct the non-topological features that exist at the current 'time'.
             proximity_reconstructed_feature_geometries = []
-            pygplates.reconstruct(proximity_features, rotation_model, proximity_reconstructed_feature_geometries, time, anchor_plate_id)
+            pygplates.reconstruct(proximity_features, rotation_model, proximity_reconstructed_feature_geometries, time)
             
             if output_all_proximity_distances:
                 proximity_reconstructed_geometry_proxies = []
@@ -601,7 +599,7 @@ def proximity(
         
         if USE_SHORTEST_DISTANCE:
             obstacle_reconstructed_feature_geometries = []
-            pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time, anchor_plate_id)
+            pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time)
             obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
                     for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
 

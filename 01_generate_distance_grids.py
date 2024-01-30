@@ -59,6 +59,19 @@ min_time = 0
 max_time = 250
 time_step = 1
 
+# The reference frame to generate the distance grids in.
+#
+# NOTE: The age grids must also be in this reference frame.
+#
+# Note: If the proximity/continent features have already been reconstructed
+#       (eg, the features are actually time-dependent snapshots of reconstructions
+#       generated from the continent contouring workflow) then they should remain
+#       in the default reference frame (anchor plate zero in that workflow).
+#       This is because they are assigned a plate ID of zero (in that workflow) and so
+#       reconstructing them (in this workflow) relative to our anchor plate ID will
+#       automatically position them correctly in our reference frame.
+anchor_plate_id = 0
+
 proximity_threshold_kms = 3000
 
 output_dir = '%s/distances_%sd' % (output_base_dir, grid_spacing)
@@ -100,6 +113,8 @@ def generate_distance_grid(time):
     command_line.extend('{0}'.format(proximity_features_file) for proximity_features_file in proximity_features_files)
     command_line.extend(['-s'])
     command_line.extend('{0}'.format(topology_filename) for topology_filename in topology_filenames)
+    command_line.extend(['-a'])
+    command_line.extend(['{0}'.format(anchor_plate_id)])
     command_line.extend([
             '-g',
             '{0}/{1}{2}.{3}'.format(agegrid_dir, agegrid_filename, time, agegrid_filename_ext),
