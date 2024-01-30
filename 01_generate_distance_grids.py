@@ -169,10 +169,13 @@ def low_priority():
         isWindows = True
 
     if isWindows:
-        import psutil
-        
-        p = psutil.Process()
-        p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+        try:
+            import psutil
+        except ImportError:
+            pass
+        else:
+            p = psutil.Process()
+            p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
     else:
         import os
 

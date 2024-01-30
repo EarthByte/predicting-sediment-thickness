@@ -8,6 +8,7 @@ To generate sediment thickness and rate grids through time, all that is required
 
 You'll also need to install the following Python dependencies:
 * [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools)
+* And, on Windows platforms, optionally install [psutil](https://pypi.org/project/psutil/) so that this workflow can use CPU cores in the *background* (ie, below-normal priority).
 
 ## Releases
 ### v1.1
