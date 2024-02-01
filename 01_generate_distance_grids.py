@@ -30,6 +30,28 @@ Outputs:
 output_base_dir = '.'
 
 # ------------------------------------------
+# --- set times and spacing
+
+min_time = 0
+max_time = 250
+time_step = 1
+
+grid_spacing = 1
+
+# The reference frame to generate the distance grids in.
+#
+# NOTE: The age grids must also be in this reference frame.
+#
+# Note: If the proximity/continent features have already been reconstructed
+#       (eg, the features are actually time-dependent snapshots of reconstructions
+#       generated from the continent contouring workflow) then they should remain
+#       in the default reference frame (anchor plate zero in that workflow).
+#       This is because they are assigned a plate ID of zero (in that workflow) and so
+#       reconstructing them (in this workflow) relative to our anchor plate ID will
+#       automatically position them correctly in our reference frame.
+anchor_plate_id = 0
+
+# ------------------------------------------
 # --- input files
 proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
@@ -46,36 +68,15 @@ agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not i
 # --- topologies and other files
 data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
 rotation_filenames = [
-    '%s/Rotations/Muller2019-Young2019-Cao2020_CombinedRotations.rot' % data_dir]
+    '{}/Rotations/Muller2019-Young2019-Cao2020_CombinedRotations.rot'.format(data_dir)]
 
 topology_filenames = [
-    '%s/DynamicPolygons/Muller2019-Young2019-Cao2020_PlateBoundaries.gpmlz' % data_dir,
-    '%s/DeformingLithosphere/Muller2019-Young2019-Cao2020_ActiveDeformation.gpmlz' % data_dir]
-
-# ------------------------------------------
-# --- set times and spacing
-grid_spacing = 1
-
-min_time = 0
-max_time = 250
-time_step = 1
-
-# The reference frame to generate the distance grids in.
-#
-# NOTE: The age grids must also be in this reference frame.
-#
-# Note: If the proximity/continent features have already been reconstructed
-#       (eg, the features are actually time-dependent snapshots of reconstructions
-#       generated from the continent contouring workflow) then they should remain
-#       in the default reference frame (anchor plate zero in that workflow).
-#       This is because they are assigned a plate ID of zero (in that workflow) and so
-#       reconstructing them (in this workflow) relative to our anchor plate ID will
-#       automatically position them correctly in our reference frame.
-anchor_plate_id = 0
+    '{}/DynamicPolygons/Muller2019-Young2019-Cao2020_PlateBoundaries.gpmlz'.format(data_dir),
+    '{}/DeformingLithosphere/Muller2019-Young2019-Cao2020_ActiveDeformation.gpmlz'.format(data_dir)]
 
 proximity_threshold_kms = 3000
 
-output_dir = '%s/distances_%sd' % (output_base_dir, grid_spacing)
+output_dir = '{}/distances_{}d'.format(output_base_dir, grid_spacing)
 
 # Use all CPUs.
 #
@@ -98,7 +99,7 @@ if not os.path.exists(output_base_dir):
 
 
 if not os.path.exists(output_dir):
-    print('%s does not exist, creating now... ' % output_dir)
+    print('{} does not exist, creating now... '.format(output_dir))
     os.mkdir(output_dir)
 
 # ----- 
@@ -109,27 +110,27 @@ def generate_distance_grid(time):
     
     command_line = [py_cmd, 'ocean_basin_proximity.py']
     command_line.extend(['-r'])
-    command_line.extend('{0}'.format(rotation_filename) for rotation_filename in rotation_filenames)
+    command_line.extend('{}'.format(rotation_filename) for rotation_filename in rotation_filenames)
     command_line.extend(['-m'])
-    command_line.extend('{0}'.format(proximity_features_file) for proximity_features_file in proximity_features_files)
+    command_line.extend('{}'.format(proximity_features_file) for proximity_features_file in proximity_features_files)
     command_line.extend(['-s'])
-    command_line.extend('{0}'.format(topology_filename) for topology_filename in topology_filenames)
+    command_line.extend('{}'.format(topology_filename) for topology_filename in topology_filenames)
     command_line.extend(['-a'])
-    command_line.extend(['{0}'.format(anchor_plate_id)])
+    command_line.extend(['{}'.format(anchor_plate_id)])
     command_line.extend([
             '-g',
-            '{0}/{1}{2}{3}.{4}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
-            '-y {0}'.format(time),
+            '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
+            '-y {}'.format(time),
             '-n',
             # Use all feature types in proximity file (according to Dietmar)...
             #'-b',
             #'PassiveContinentalBoundary',
             '-x',
-            '{0}'.format(max_time),
+            '{}'.format(max_time),
             '-t',
             '1',
             '-i',
-            '{0}'.format(grid_spacing),
+            '{}'.format(grid_spacing),
             #'-q',
             #str(proximity_threshold_kms),
             #'-d', # output distance with time
@@ -137,7 +138,7 @@ def generate_distance_grid(time):
             '-w',
             '-c',
             str(1),
-            '{0}/distance_{1}_{2}'.format(output_dir, grid_spacing, time)])
+            '{}/distance_{}_{}'.format(output_dir, grid_spacing, time)])
     
     print('Time:', time)
     
@@ -150,8 +151,8 @@ def generate_distance_grid(time):
     # this way we can import them as time-dependent raster into GPlates version 2.0 and earlier.
     #
     
-    src_mean_distance_basename = '{0}/distance_{1}_{2}_mean_distance'.format(output_dir, grid_spacing, time)
-    dst_mean_distance_basename = '{0}/mean_distance_{1}d_{2}'.format(output_dir, grid_spacing, time)
+    src_mean_distance_basename = '{}/distance_{}_{}_mean_distance'.format(output_dir, grid_spacing, time)
+    dst_mean_distance_basename = '{}/mean_distance_{}d_{}'.format(output_dir, grid_spacing, time)
     
     src_mean_distance_xy = src_mean_distance_basename + '.xy'
     if os.access(src_mean_distance_xy, os.R_OK):

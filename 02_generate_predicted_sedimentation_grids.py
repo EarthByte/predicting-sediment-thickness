@@ -37,9 +37,18 @@ Outputs:
 
 output_base_dir = '.'
 
+# ------------------------------------------
+# --- set times and spacing
+
+min_time = 0
+max_time = 250
+time_step = 1
+
+distance_grid_spacing = 1   # grid spacing of input distance grids
+grid_spacing = 0.1          # grid spacing of output sedimentation grids
+
 # --- distance grids (from part 1)
-distance_grid_dir = '%s/distances_1d' % output_base_dir
-distance_base_name = 'mean_distance_1d'
+distance_grid_base_path = '{0}/distances_{1}d/mean_distance_{1}d'.format(output_base_dir, distance_grid_spacing)
 
 # --- output directory name
 sediment_output_sub_dir = 'sedimentation_output'
@@ -49,14 +58,6 @@ agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids
 agegrid_filename_prefix = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
 agegrid_filename_suffix = ''    # everything after 'time' (excluding the extension), eg, "Ma"
 agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
-
-# ------------------------------------------
-# --- set times and spacing
-grid_spacing = 0.1
-
-min_time = 0
-max_time = 250
-time_step = 1
 
 # Use all CPUs.
 #
@@ -74,7 +75,7 @@ use_all_cpus = True
 
 # check if the base output directory exists. If it doesn't, create it.
 if not os.path.exists(output_base_dir + '/' + sediment_output_sub_dir):
-    print('%s does not exist, creating now... ' % (output_base_dir + '/' + sediment_output_sub_dir))
+    print('{} does not exist, creating now... '.format(output_base_dir + '/' + sediment_output_sub_dir))
     os.mkdir(output_base_dir + '/' + sediment_output_sub_dir)
 
 
@@ -100,9 +101,9 @@ def generate_predicted_sedimentation_grid(
             py_cmd,
             predict_sedimentation_script,
             '-d',
-            '{0}/{1}_{2}.nc'.format(distance_grid_dir, distance_base_name, time),
+            '{}_{}.nc'.format(distance_grid_base_path, time),
             '-g',
-            '{0}/{1}{2}{3}.{4}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
+            '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
             '-i',
             str(grid_spacing),
             '-w',
@@ -124,7 +125,7 @@ def generate_predicted_sedimentation_grid(
                 str(scale_sedimentation_rate)])
     command_line.extend([
             '--',
-            '{0}/sed_{1}_{2}'.format(output_dir, grid_spacing, time)])
+            '{}/sed_{}_{}'.format(output_dir, grid_spacing, time)])
     
     #print('Time:', time)
     #print(command_line)
@@ -138,16 +139,16 @@ def generate_predicted_sedimentation_grid(
     # end of the base filename - this way we can import them as time-dependent raster into GPlates.
     for ext in ('xy', 'nc'):
         
-        src_sed_rate = '{0}/sed_{1}_{2}_sed_rate.{3}'.format(output_dir, grid_spacing, time, ext)
-        dst_sed_rate = '{0}/sed_rate_{1}d_{2}.{3}'.format(output_dir, grid_spacing, time, ext)
+        src_sed_rate = '{}/sed_{}_{}_sed_rate.{}'.format(output_dir, grid_spacing, time, ext)
+        dst_sed_rate = '{}/sed_rate_{}d_{}.{}'.format(output_dir, grid_spacing, time, ext)
         
         if os.access(dst_sed_rate, os.R_OK):
             os.remove(dst_sed_rate)
         if os.path.exists(src_sed_rate):
             os.rename(src_sed_rate, dst_sed_rate)
         
-        src_sed_thick = '{0}/sed_{1}_{2}_sed_thick.{3}'.format(output_dir, grid_spacing, time, ext)
-        dst_sed_thick = '{0}/sed_thick_{1}d_{2}.{3}'.format(output_dir, grid_spacing, time, ext)
+        src_sed_thick = '{}/sed_{}_{}_sed_thick.{}'.format(output_dir, grid_spacing, time, ext)
+        dst_sed_thick = '{}/sed_thick_{}d_{}.{}'.format(output_dir, grid_spacing, time, ext)
         
         if os.access(dst_sed_thick, os.R_OK):
             os.remove(dst_sed_thick)
@@ -258,7 +259,7 @@ if __name__ == '__main__':
     
     # check if the output dir exists. If not, create
     if not os.path.exists(output_dir):
-        print('%s does not exist, creating now... ' % output_dir)
+        print('{} does not exist, creating now... '.format(output_dir))
         os.mkdir(output_dir)
 
     print('Generating predicted sedimentation rate grids...')
@@ -348,7 +349,7 @@ if __name__ == '__main__':
 
     # check if the output dir exists. If not, create
     if not os.path.exists(output_dir):
-        print('%s does not exist, creating now... ' % output_dir)
+        print('{} does not exist, creating now... '.format(output_dir))
         os.mkdir(output_dir)
     print('Generating predicted sediment thickness grids...')
 
