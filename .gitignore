@@ -99,3 +99,4 @@ ENV/
 .mypy_cache/
 python_notebooks_and_input_data_archive/.DS_Store
 .DS_Store
+gmt.history
