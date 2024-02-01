@@ -34,11 +34,6 @@ import shortest_path
 import subprocess
 import sys
 
-data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
-coastline_filename = '%s/Coastlines/Global_EarthByte_GPlates_PresentDay_Coastlines.gpmlz' % data_dir
-
-USE_SHORTEST_DISTANCE = True
-
 
 # Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
 DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES = 1
@@ -376,12 +371,16 @@ def proximity(
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
+        continent_obstacle_filenames = None,
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None):
     """
     Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
     
     If an ocean basin point falls outside the age grid (in masked region) then it is ignored.
+
+    Continent obstacle filenames can optionally be specified. If they are specified then they will form geometry obstacles that the
+    shortest distance path must go around (ie, water must flow around continents). Obstacles can be both polygons and polylines.
     
     A threshold distance can be specified to reject proximities exceeding it.
     
@@ -449,10 +448,11 @@ def proximity(
     # All proximity data to return to caller.
     proximity_data = ProximityData()
     
-    if USE_SHORTEST_DISTANCE:
+    if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
-        obstacle_features = pygplates.FeatureCollection(coastline_filename)
+        obstacle_feature_collections = [pygplates.FeatureCollection(continent_obstacle_filename)
+                                        for continent_obstacle_filename in continent_obstacle_filenames]
     
     # Iterate from paleo time until we exceed the maximum begin time of all ocean basin point locations.
     min_time_index = int(math.ceil(age_grid_paleo_time / time_increment))
@@ -536,9 +536,9 @@ def proximity(
                 if proximity_reconstructed_geometry_proxies is not None:
                     proximity_reconstructed_geometry_proxies.append(proximity_reconstructed_feature_geometry.get_feature())
         
-        if USE_SHORTEST_DISTANCE:
+        if continent_obstacle_filenames:
             obstacle_reconstructed_feature_geometries = []
-            pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time)
+            pygplates.reconstruct(obstacle_feature_collections, rotation_model, obstacle_reconstructed_feature_geometries, time)
             obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
                     for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
 
@@ -703,6 +703,7 @@ def proximity_parallel(
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
+        continent_obstacle_filenames = None,
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None,
         # If None then defaults to all available CPUs...
@@ -737,6 +738,7 @@ def proximity_parallel(
             output_mean_distance,
             output_standard_deviation_distance,
             output_all_proximity_distances,
+            continent_obstacle_filenames,
             anchor_plate_id,
             proximity_distance_threshold_radians)
     
@@ -779,6 +781,7 @@ def proximity_parallel(
                         output_mean_distance,
                         output_standard_deviation_distance,
                         output_all_proximity_distances,
+                        continent_obstacle_filenames,
                         anchor_plate_id,
                         proximity_distance_threshold_radians
                     ) for pool_input_points_sub_list in pool_input_points_sub_lists
@@ -948,6 +951,11 @@ if __name__ == '__main__':
                     'For example, proximity to subduction zones is specified as SubductionZone (without the gpml: prefix). '
                     'Defaults to all proximity features (all resolved subsegments for topological features '
                     'or all proximity reconstructed feature geometries for non-topological features).')
+        parser.add_argument('-o', '--continent_obstacle_filenames', type=str, nargs='+',
+                metavar='continent_obstacle_filename',
+                help='Optional continent obstacles that the shortest distance path must go around (ie, water flowing around continents, rather than through). '
+                     'If not specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries. '
+                     'Obstacles can be both polygons and polylines. Default is no obstacles.')
         parser.add_argument('-s', '--topological_reconstruction_filenames', type=str, nargs='+', required=True,
                 metavar='topological_reconstruction_filename',
                 help='The filenames of the topological files used to incrementally reconstruct the (paleo) ocean basin points.')
@@ -1069,6 +1077,7 @@ if __name__ == '__main__':
                 args.output_mean_distance,
                 args.output_std_dev_distance,
                 args.output_all_proximity_distances,
+                args.continent_obstacle_filenames,
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
                 args.num_cpus)

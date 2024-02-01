@@ -57,6 +57,15 @@ proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
 ]
 
+# Optional continent obstacles that the shortest distance path must go around (ie, water flowing around continents, rather than through).
+# If not specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
+# Obstacles can be both polygons and polylines.
+#
+#continent_obstacle_files = None
+continent_obstacle_files = [
+    '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/Coastlines/Global_EarthByte_GPlates_PresentDay_Coastlines.gpmlz',
+]
+
 # --- location of gplates files on your computer
 # DON'T FORGET TO UPDATE ocean_basin_proximity.py!
 # --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
@@ -113,6 +122,10 @@ def generate_distance_grid(time):
     command_line.extend('{}'.format(rotation_filename) for rotation_filename in rotation_filenames)
     command_line.extend(['-m'])
     command_line.extend('{}'.format(proximity_features_file) for proximity_features_file in proximity_features_files)
+    # If using continent obstacles.
+    if continent_obstacle_files:
+        command_line.extend(['--continent_obstacle_filenames'])
+        command_line.extend(['{}'.format(continent_obstacle_file) for continent_obstacle_file in continent_obstacle_files])
     command_line.extend(['-s'])
     command_line.extend('{}'.format(topology_filename) for topology_filename in topology_filenames)
     command_line.extend(['-a'])
