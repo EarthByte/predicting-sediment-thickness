@@ -35,11 +35,12 @@ proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
 ]
 
-# --- lcoation of gplates files on your computer
+# --- location of gplates files on your computer
 # DON'T FORGET TO UPDATE ocean_basin_proximity.py!
 # --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
 agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
-agegrid_filename = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
+agegrid_filename_prefix = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
+agegrid_filename_suffix = ''    # everything after 'time' (excluding the extension), eg, "Ma"
 agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
 
 # --- topologies and other files
@@ -117,7 +118,7 @@ def generate_distance_grid(time):
     command_line.extend(['{0}'.format(anchor_plate_id)])
     command_line.extend([
             '-g',
-            '{0}/{1}{2}.{3}'.format(agegrid_dir, agegrid_filename, time, agegrid_filename_ext),
+            '{0}/{1}{2}{3}.{4}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
             '-y {0}'.format(time),
             '-n',
             # Use all feature types in proximity file (according to Dietmar)...
