@@ -168,55 +168,6 @@ def get_positions_and_ages(input_points, age_grid_filename):
     return lon_lat_age_list
 
 
-# Determine the overriding plate of the subducting line.
-def find_overriding_plate(subduction_shared_sub_segment, time, reconstructed_point):
-    
-    # Get the subduction polarity of the nearest subducting line.
-    subduction_polarity = subduction_shared_sub_segment.get_feature().get_enumeration(pygplates.PropertyName.gpml_subduction_polarity)
-    if (not subduction_polarity) or (subduction_polarity == 'Unknown'):
-        print('WARNING: Unable to find the overriding plate of the nearest subducting line "{0}"'.format(
-            subduction_shared_sub_segment.get_feature().get_name()), file=sys.stderr)
-        print('    subduction zone feature is missing subduction polarity property or it is set to "Unknown".', file=sys.stderr)
-        return
-
-    overriding_plate = None
-
-    # Iterate over the topologies that are sharing the part (sub-segment) of the subducting line that is closest to the feature.
-    sharing_resolved_topologies = subduction_shared_sub_segment.get_sharing_resolved_topologies()
-    geometry_reversal_flags = subduction_shared_sub_segment.get_sharing_resolved_topology_geometry_reversal_flags()
-    for index in range(len(sharing_resolved_topologies)):
-
-        sharing_resolved_topology = sharing_resolved_topologies[index]
-        geometry_reversal_flag = geometry_reversal_flags[index]
-
-        if sharing_resolved_topology.get_resolved_boundary().get_orientation() == pygplates.PolygonOnSphere.Orientation.clockwise:
-            # The current topology sharing the subducting line has clockwise orientation (when viewed from above the Earth).
-            # If the overriding plate is to the 'left' of the subducting line (when following its vertices in order) and
-            # the subducting line is reversed when contributing to the topology then that topology is the overriding plate.
-            # A similar test applies to the 'right' but with the subducting line not reversed in the topology.
-            if ((subduction_polarity == 'Left' and geometry_reversal_flag) or
-                (subduction_polarity == 'Right' and not geometry_reversal_flag)):
-                overriding_plate = sharing_resolved_topology
-                break
-        else:
-            # The current topology sharing the subducting line has counter-clockwise orientation (when viewed from above the Earth).
-            # If the overriding plate is to the 'left' of the subducting line (when following its vertices in order) and
-            # the subducting line is not reversed when contributing to the topology then that topology is the overriding plate.
-            # A similar test applies to the 'right' but with the subducting line reversed in the topology.
-            if ((subduction_polarity == 'Left' and not geometry_reversal_flag) or
-                (subduction_polarity == 'Right' and geometry_reversal_flag)):
-                overriding_plate = sharing_resolved_topology
-                break
-    
-    if overriding_plate is None:
-        print('WARNING: Unable to find the overriding plate of the nearest subducting line "{0}" at {1}Ma for reconstructed point {2}'.format(
-            subduction_shared_sub_segment.get_feature().get_name(), time, reconstructed_point.to_lat_lon()), file=sys.stderr)
-        print('    topology on overriding side of subducting line is missing.', file=sys.stderr)
-        return
-    
-    return overriding_plate
-
-
 # Reconstruct points from 'time' to 'time + time_increment' using topologies.
 def topology_reconstruct_time_step(
         time,
@@ -422,7 +373,6 @@ def proximity(
         age_grid_paleo_time,
         time_increment,
         output_distance_with_time,
-        output_overriding_plate_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
@@ -446,7 +396,6 @@ def proximity(
         raise ValueError('The age grid paleo time "{0}" is not positive or zero.'.format(age_grid_paleo_time))
     
     if (not output_distance_with_time and
-        not output_overriding_plate_with_time and
         not output_mean_distance and
         not output_standard_deviation_distance):
         raise ValueError('No output specified for ocean basin proximity.')
@@ -454,16 +403,6 @@ def proximity(
     if (output_all_proximity_distances and
         proximity_features_are_topological):
         raise ValueError('Outputting all proximity distances not supported for topological features.')
-    
-    # Make sure user provides *topological* proximity features and specifies subduction zone when
-    # they want to output overriding plate IDs.
-    if output_overriding_plate_with_time:
-        if not proximity_features_are_topological:
-            raise ValueError('Must provide topological features when outputting overriding plate over time.')
-        if (not proximity_feature_types or
-            len(proximity_feature_types) != 1 or
-            proximity_feature_types[0] != pygplates.FeatureType.gpml_subduction_zone.get_name()):
-            raise ValueError('Subduction zone must be the only feature type when outputting overriding plate over time.')
     
     # Get the input point ages.
     lon_lat_age_list = get_positions_and_ages(input_points, age_grid_filename)
@@ -701,18 +640,7 @@ def proximity(
                     sum_square_distances += proximity_in_kms * proximity_in_kms
                     ocean_basin_point_statistics[proximity_feature_name] = (num_distances, sum_distances, sum_square_distances)
             
-            if output_distance_with_time or output_overriding_plate_with_time:
-                # Determine the overriding plate of the subducting line (if requested).
-                if output_overriding_plate_with_time:
-                    overriding_plate = find_overriding_plate(
-                            nearest_proximity_shared_sub_segment,
-                            time,
-                            ocean_basin_reconstructed_point)
-                    if not overriding_plate:
-                        # The overriding plate was not found so skip the current ocean basin point.
-                        # Note that a warning has already been generated by "find_overriding_plate()".
-                        continue
-                
+            if output_distance_with_time:
                 ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
                 
                 for proximity_feature_name, proximity in ocean_basin_proximities.items():
@@ -721,23 +649,10 @@ def proximity(
                     feature_proximity_data = proximity_data.get_feature_data(proximity_feature_name)
                     feature_proximity_time_data = feature_proximity_data.get_time_data(time_index)
                     
-                    if output_distance_with_time:
-                        if output_overriding_plate_with_time:
-                            feature_proximity_time_data.append((
-                                ocean_basin_reconstructed_lon,
-                                ocean_basin_reconstructed_lat,
-                                proximity * pygplates.Earth.mean_radius_in_kms,
-                                overriding_plate.get_feature().get_reconstruction_plate_id()))
-                        else:
-                            feature_proximity_time_data.append((
-                                ocean_basin_reconstructed_lon,
-                                ocean_basin_reconstructed_lat,
-                                proximity * pygplates.Earth.mean_radius_in_kms))
-                    else:
-                        feature_proximity_time_data.append((
-                            ocean_basin_reconstructed_lon,
-                            ocean_basin_reconstructed_lat,
-                            overriding_plate.get_feature().get_reconstruction_plate_id()))
+                    feature_proximity_time_data.append((
+                        ocean_basin_reconstructed_lon,
+                        ocean_basin_reconstructed_lat,
+                        proximity * pygplates.Earth.mean_radius_in_kms))
     
     if output_mean_distance or output_standard_deviation_distance:
         for (ocean_basin_lon, ocean_basin_lat), ocean_basin_point_statistics in ocean_basin_points_statistics.items():
@@ -785,7 +700,6 @@ def proximity_parallel(
         age_grid_paleo_time,
         time_increment,
         output_distance_with_time,
-        output_overriding_plate_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
@@ -820,7 +734,6 @@ def proximity_parallel(
             age_grid_paleo_time,
             time_increment,
             output_distance_with_time,
-            output_overriding_plate_with_time,
             output_mean_distance,
             output_standard_deviation_distance,
             output_all_proximity_distances,
@@ -863,7 +776,6 @@ def proximity_parallel(
                         age_grid_paleo_time,
                         time_increment,
                         output_distance_with_time,
-                        output_overriding_plate_with_time,
                         output_mean_distance,
                         output_standard_deviation_distance,
                         output_all_proximity_distances,
@@ -905,7 +817,6 @@ def write_proximity_data(
         output_filename_extension,
         time_increment,
         output_distance_with_time,
-        output_overriding_plate_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
         output_grd_files = None):
@@ -913,7 +824,7 @@ def write_proximity_data(
     all_proximity_feature_data = proximity_data.get_all_feature_data()
     for feature_name, proximity_feature_data in all_proximity_feature_data.items():
         
-        if output_distance_with_time or output_overriding_plate_with_time:
+        if output_distance_with_time:
             for time_index, proximity_feature_time_data in proximity_feature_data.get_all_time_data().items():
                 time = time_index * time_increment
                 if feature_name is not None:
@@ -991,11 +902,8 @@ if __name__ == '__main__':
     specify the '-b' option (eg, for proximity to subduction zones specify '-b SubductionZone').
     
     The output can be any or all of the following:
-     1) For each time from present day to the maximum age of all ocean basin points (determined by the age grid) an output xyzw file is
-        generated containing the reconstructed (lon, lat) point locations (as x,y) and the minimum distance to all proximity features (as z) and
-        optionally the overriding plate ID of the nearest subducting line (as w, or as z if '-d' option not specified) if the
-        proximity features are topological and the proximity feature type ('-b') is subducting.
-        See the '-d' and '-p' options.
+     1) For each time from present day to the maximum age of all ocean basin points (determined by the age grid) an output xyz file is
+        generated containing the reconstructed (lon, lat) point locations (as x,y) and the minimum distance to all proximity features (as z).
      2) An output xyz file is generated containing 'present day' (lon, lat) ocean basin point locations (as x,y) and the mean distances
         of each point to all proximity features averaged over the point's lifetime (as determined by the age grid). See the '-j' option.
         A similar output xyz file can be generated containing standard deviation (instead of mean) distance. See the '-k' option.
@@ -1064,14 +972,6 @@ if __name__ == '__main__':
         parser.add_argument('-d', '--output_distance_with_time', action='store_true',
                 help='For each input point at each time during its lifetime write its distance to the nearest feature. '
                     'If no output options (excluding "output_all_proximity_distances") are specified then this one is used.')
-        parser.add_argument('-p', '--output_overriding_plate', action='store_true',
-                dest='output_overriding_plate_with_time',
-                help='For each input point at each time during its lifetime write the overriding plate ID of the nearest subduction zone. '
-                    'Write the overriding plate ID to the fourth (w) column of the output if also writing distance (-d/--output_distance_with_time), '
-                    'otherwise write to the third (z) column. '
-                    'This option can only be specified if using topological features (ie, -n is not specified) '
-                    'and subduction zones are the only feature type (ie, -b SubductionZone). '
-                    'By default it is not written.')
         parser.add_argument('-j', '--output_mean_distance', action='store_true',
                 help='For each input point write its mean distance to features averaged over its lifetime. '
                     'By default it is not written.')
@@ -1120,7 +1020,6 @@ if __name__ == '__main__':
         
         # Default to 'output_distance_with_time' if no output options are specified.
         if (not args.output_distance_with_time and
-            not args.output_overriding_plate_with_time and
             not args.output_mean_distance and
             not args.output_std_dev_distance):
             args.output_distance_with_time = True
@@ -1129,18 +1028,6 @@ if __name__ == '__main__':
             not args.non_topological_proximity_features):
             raise argparse.ArgumentTypeError(
                 "Can only specify 'output_all_proximity_distances' if 'non_topological_proximity_features' is also specified.")
-        
-        # Make sure user provides *topological* features and specifies subduction zone when
-        # they want to output overriding plate IDs.
-        if args.output_overriding_plate_with_time:
-            if args.non_topological_proximity_features:
-                raise argparse.ArgumentTypeError(
-                    "'output_overriding_plate' and 'non_topological_proximity_features' cannot both be specified.")
-            if (not args.proximity_feature_types or
-                len(args.proximity_feature_types) != 1 or
-                args.proximity_feature_types[0] != pygplates.FeatureType.gpml_subduction_zone.get_name()):
-                raise argparse.ArgumentTypeError(
-                    "'proximity_feature_types' must specify only 'SubductionZone' when also specifying 'output_overriding_plate'.")
         
         if args.ocean_basin_points_filename is not None:
             if args.ocean_basin_grid_spacing is not None:
@@ -1179,7 +1066,6 @@ if __name__ == '__main__':
                 args.age_grid_paleo_time,
                 args.time_increment,
                 args.output_distance_with_time,
-                args.output_overriding_plate_with_time,
                 args.output_mean_distance,
                 args.output_std_dev_distance,
                 args.output_all_proximity_distances,
@@ -1196,7 +1082,6 @@ if __name__ == '__main__':
                 args.output_filename_extension,
                 args.time_increment,
                 args.output_distance_with_time,
-                args.output_overriding_plate_with_time,
                 args.output_mean_distance,
                 args.output_std_dev_distance,
                 (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
