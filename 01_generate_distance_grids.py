@@ -32,6 +32,7 @@ output_base_dir = '.'
 # ------------------------------------------
 # --- set times and spacing
 
+# Generate distance grids for times in the range [min_time, max_time] at 'time_step' intervals.
 min_time = 0
 max_time = 250
 time_step = 1
@@ -82,6 +83,13 @@ topology_filenames = [
     '{}/DynamicPolygons/Muller2019-Young2019-Cao2020_PlateBoundaries.gpmlz'.format(data_dir),
     '{}/DeformingLithosphere/Muller2019-Young2019-Cao2020_ActiveDeformation.gpmlz'.format(data_dir)]
 
+# For each distance grid do not reconstruct ocean points earlier than 'max_topological_reconstruction_time'
+# (each ocean point is reconstructed back to its age grid value or this value, whichever is smaller).
+# This limit can be set to the earliest (max) reconstruction time of the topological model.
+# If it's 'None' then only the age grid limits how far back each point is reconstructed.
+max_topological_reconstruction_time = 1000  # can be None to just use age grid as the limit
+
+# Distances in the mean distance grids are clamped to this value (in kms).
 proximity_threshold_kms = 3000
 
 output_dir = '{}/distances_{}d'.format(output_base_dir, grid_spacing)
@@ -129,6 +137,10 @@ def generate_distance_grid(time):
     command_line.extend('{}'.format(topology_filename) for topology_filename in topology_filenames)
     command_line.extend(['-a'])
     command_line.extend(['{}'.format(anchor_plate_id)])
+    # If limiting the max topological reconstruction time.
+    if max_topological_reconstruction_time is not None:
+        command_line.extend(['-x'])
+        command_line.extend(['{}'.format(max_topological_reconstruction_time)])
     command_line.extend([
             '-g',
             '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
@@ -137,8 +149,6 @@ def generate_distance_grid(time):
             # Use all feature types in proximity file (according to Dietmar)...
             #'-b',
             #'PassiveContinentalBoundary',
-            '-x',
-            '{}'.format(max_time),
             '-t',
             '1',
             '-i',

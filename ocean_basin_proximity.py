@@ -172,7 +172,7 @@ def topology_reconstruct_time_step(
         curr_point_infos,
         next_point_infos):
     #
-    # The following code is the *slower* version of point-in-polygon testing.
+    # The following code comment is the *slower* version of point-in-polygon testing.
     #
     
     #    for point_feature, point_begin_time, curr_recon_point in curr_point_infos:
@@ -363,7 +363,6 @@ def proximity(
         proximity_features_are_topological,
         proximity_feature_types,
         topological_reconstruction_filenames,
-        max_topological_reconstruction_time,
         age_grid_filename,
         age_grid_paleo_time,
         time_increment,
@@ -371,6 +370,7 @@ def proximity(
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
+        max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None):
@@ -378,6 +378,10 @@ def proximity(
     Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
     
     If an ocean basin point falls outside the age grid (in masked region) then it is ignored.
+
+    Ocean points are not reconstructed earlier than 'max_topological_reconstruction_time'
+    (each ocean point is reconstructed back to its age grid value or this value, whichever is smaller).
+    If it's 'None' then only the age grid limits how far back each point is reconstructed.
 
     Continent obstacle filenames can optionally be specified. If they are specified then they will form geometry obstacles that the
     shortest distance path must go around (ie, water must flow around continents). Obstacles can be both polygons and polylines.
@@ -451,15 +455,15 @@ def proximity(
     if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
-        obstacle_feature_collections = [pygplates.FeatureCollection(continent_obstacle_filename)
-                                        for continent_obstacle_filename in continent_obstacle_filenames]
-    
+        obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
+
     # Iterate from paleo time until we exceed the maximum begin time of all ocean basin point locations.
     min_time_index = int(math.ceil(age_grid_paleo_time / time_increment))
     max_time = max(ocean_basin_point_info[1] for ocean_basin_point_info in ocean_basin_point_infos)
-    # We cannot reconstruct further in the past than allowed by the topological reconstruction features.
-    if max_time > max_topological_reconstruction_time:
-        max_time = max_topological_reconstruction_time
+    if max_topological_reconstruction_time is not None:
+        # We cannot reconstruct further in the past than allowed by the topological reconstruction features.
+        if max_time > max_topological_reconstruction_time:
+            max_time = max_topological_reconstruction_time
     max_time_index = int(math.trunc(max_time / time_increment))
     next_ocean_basin_point_infos = ocean_basin_point_infos
     for time_index in range(min_time_index, max_time_index + 1):
@@ -538,7 +542,7 @@ def proximity(
         
         if continent_obstacle_filenames:
             obstacle_reconstructed_feature_geometries = []
-            pygplates.reconstruct(obstacle_feature_collections, rotation_model, obstacle_reconstructed_feature_geometries, time)
+            pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time)
             obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
                     for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
 
@@ -695,7 +699,6 @@ def proximity_parallel(
         proximity_features_are_topological,
         proximity_feature_types,
         topological_reconstruction_filenames,
-        max_topological_reconstruction_time,
         age_grid_filename,
         age_grid_paleo_time,
         time_increment,
@@ -703,6 +706,7 @@ def proximity_parallel(
         output_mean_distance,
         output_standard_deviation_distance,
         output_all_proximity_distances,
+        max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None,
@@ -730,7 +734,6 @@ def proximity_parallel(
             proximity_features_are_topological,
             proximity_feature_types,
             topological_reconstruction_filenames,
-            max_topological_reconstruction_time,
             age_grid_filename,
             age_grid_paleo_time,
             time_increment,
@@ -738,6 +741,7 @@ def proximity_parallel(
             output_mean_distance,
             output_standard_deviation_distance,
             output_all_proximity_distances,
+            max_topological_reconstruction_time,
             continent_obstacle_filenames,
             anchor_plate_id,
             proximity_distance_threshold_radians)
@@ -773,7 +777,6 @@ def proximity_parallel(
                         proximity_features_are_topological,
                         proximity_feature_types,
                         topological_reconstruction_filenames,
-                        max_topological_reconstruction_time,
                         age_grid_filename,
                         age_grid_paleo_time,
                         time_increment,
@@ -781,6 +784,7 @@ def proximity_parallel(
                         output_mean_distance,
                         output_standard_deviation_distance,
                         output_all_proximity_distances,
+                        max_topological_reconstruction_time,
                         continent_obstacle_filenames,
                         anchor_plate_id,
                         proximity_distance_threshold_radians
@@ -959,9 +963,12 @@ if __name__ == '__main__':
         parser.add_argument('-s', '--topological_reconstruction_filenames', type=str, nargs='+', required=True,
                 metavar='topological_reconstruction_filename',
                 help='The filenames of the topological files used to incrementally reconstruct the (paleo) ocean basin points.')
-        parser.add_argument('-x', '--max_topological_reconstruction_time', type=int, required=True,
+        parser.add_argument('-x', '--max_topological_reconstruction_time', type=int,
                 metavar='max_topological_reconstruction_time',
-                help='The maximum (largest) time that the topological reconstruction files can reconstruct back to (in Ma). Value must be an integer.')
+                help='Optional maximum (largest) time that the topological reconstruction files can reconstruct back to (in Ma). '
+                     'Ocean points are not reconstructed earlier than this time '
+                     '(each ocean point is reconstructed back to its age grid value or this value, whichever is smaller). '
+                     'Value must be an integer. If not specified then only the age grid limits how far back each point is reconstructed.')
         parser.add_argument('-g', '--age_grid_filename', type=str, required=True,
                 metavar='age_grid_filename',
                 help='The age grid filename used to find the begin age of each ocean basin point.')
@@ -1069,7 +1076,6 @@ if __name__ == '__main__':
                 not args.non_topological_proximity_features, # proximity_features_are_topological
                 args.proximity_feature_types,
                 args.topological_reconstruction_filenames,
-                args.max_topological_reconstruction_time,
                 args.age_grid_filename,
                 args.age_grid_paleo_time,
                 args.time_increment,
@@ -1077,6 +1083,7 @@ if __name__ == '__main__':
                 args.output_mean_distance,
                 args.output_std_dev_distance,
                 args.output_all_proximity_distances,
+                args.max_topological_reconstruction_time,
                 args.continent_obstacle_filenames,
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
