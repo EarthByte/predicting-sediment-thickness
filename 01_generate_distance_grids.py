@@ -124,43 +124,67 @@ def generate_distance_grid(time):
     if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
         py_cmd = 'python'
     
+    # Calling the ocean basin proximity script.
     command_line = [py_cmd, 'ocean_basin_proximity.py']
-    command_line.extend(['-r'])
+
+    # Rotation files.
+    command_line.append('-r')
     command_line.extend('{}'.format(rotation_filename) for rotation_filename in rotation_filenames)
-    command_line.extend(['-m'])
+
+    # Proximity files.
+    command_line.append('-m')
     command_line.extend('{}'.format(proximity_features_file) for proximity_features_file in proximity_features_files)
+    # Proximity features are non-topological.
+    command_line.append('-n')
+
     # If using continent obstacles.
     if continent_obstacle_files:
-        command_line.extend(['--continent_obstacle_filenames'])
-        command_line.extend(['{}'.format(continent_obstacle_file) for continent_obstacle_file in continent_obstacle_files])
-    command_line.extend(['-s'])
+        command_line.append('--continent_obstacle_filenames')
+        command_line.extend('{}'.format(continent_obstacle_file) for continent_obstacle_file in continent_obstacle_files)
+    
+    # Topological files.
+    command_line.append('-s')
     command_line.extend('{}'.format(topology_filename) for topology_filename in topology_filenames)
-    command_line.extend(['-a'])
-    command_line.extend(['{}'.format(anchor_plate_id)])
+
+    # Anchor plate ID.
+    command_line.extend(['-a', '{}'.format(anchor_plate_id)])
+
+    # Age grid.
+    command_line.extend(['-g', '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext)])
+    # Age grid paleo time.
+    command_line.extend(['-y', '{}'.format(time)])
+
+    # Use all feature types in proximity file (according to Dietmar)...
+    #command_line.extend(['-b', 'PassiveContinentalBoundary'])
+
+    # Time increment is 1 Myr (this is for topological reconstruction of the ocean points).
+    command_line.extend(['-t', '1'])
+    
     # If limiting the max topological reconstruction time.
     if max_topological_reconstruction_time is not None:
-        command_line.extend(['-x'])
-        command_line.extend(['{}'.format(max_topological_reconstruction_time)])
-    command_line.extend([
-            '-g',
-            '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
-            '-y {}'.format(time),
-            '-n',
-            # Use all feature types in proximity file (according to Dietmar)...
-            #'-b',
-            #'PassiveContinentalBoundary',
-            '-t',
-            '1',
-            '-i',
-            '{}'.format(grid_spacing),
-            #'-q',
-            #str(proximity_threshold_kms),
-            #'-d', # output distance with time
-            '-j',
-            '-w',
-            '-c',
-            str(1),
-            '{}/distance_{}_{}'.format(output_dir, grid_spacing, time)])
+        command_line.extend(['-x', '{}'.format(max_topological_reconstruction_time)])
+    
+    # Grid spacing.
+    command_line.extend(['-i', '{}'.format(grid_spacing)])
+
+    # Proximity threshold - but we're not using here - instead clamping the mean distance grids explicitly below.
+    #command_line.extend(['-q', str(proximity_threshold_kms)])
+
+    # Don't output distance grids for all reconstruction times.
+    # Only outputting a single "mean" (over all reconstruction times) distance grid.
+    #command_line.append('-d')
+
+    # Output a "mean" (over all reconstruction times) distance grid.
+    command_line.append('-j')
+
+    # Generate a grd (".nc") file for each xyz file.
+    command_line.append('-w')
+    
+    # Number of cores.
+    command_line.extend(['-c', '1'])
+
+    # Distance grids output filename prefix.
+    command_line.append('{}/distance_{}_{}'.format(output_dir, grid_spacing, time))
     
     print('Time:', time)
     
