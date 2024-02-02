@@ -303,15 +303,15 @@ class StageRotationCache(object):
         return stage_rotation
 
 
-# Class to hold all proximity data associated with a particular proximity feature.
-class FeatureProximityData(object):
+# Class to hold all proximity data.
+class ProximityData(object):
     def __init__(self):
         self.time_data = {}
         self.mean_data = []
         self.std_dev_data = []
     
     # Return list of data tuples at specified time.
-    # Each tuple is (lon, lat [, proximity] [, overriding_plate_id])
+    # Each tuple is (lon, lat, proximity)
     # to write to the output file for the current 'time'.
     def get_time_data(self, time_index):
         return self.time_data.setdefault(time_index, [])
@@ -330,32 +330,13 @@ class FeatureProximityData(object):
     def get_std_dev_data(self):
         return self.std_dev_data
     
-    # Merge other feature proximity data in us.
+    # Merge other proximity data into us.
     def update(self, other):
         for time_index, other_time_data in other.get_all_time_data().items():
             time_data = self.get_time_data(time_index)
             time_data += other_time_data
-        self.mean_data += other.get_mean_data();
-        self.std_dev_data += other.get_std_dev_data();
-
-
-# Class to hold all proximity data.
-class ProximityData(object):
-    def __init__(self):
-        self.feature_data = {}
-    
-    # Return FeatureProximityData object for specified feature name.
-    def get_feature_data(self, feature_name=None):
-        return self.feature_data.setdefault(feature_name, FeatureProximityData())
-    
-    # Return dict of all feature data.
-    def get_all_feature_data(self):
-        return self.feature_data
-    
-    # Merge other proximity data into us.
-    def update(self, other):
-        for feature_name, other_feature_data in other.get_all_feature_data().items():
-            self.get_feature_data(feature_name).update(other_feature_data)
+        self.mean_data += other.get_mean_data()
+        self.std_dev_data += other.get_std_dev_data()
 
 
 def proximity(
@@ -371,7 +352,6 @@ def proximity(
         output_distance_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
-        output_all_proximity_distances,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
@@ -404,10 +384,6 @@ def proximity(
         not output_mean_distance and
         not output_standard_deviation_distance):
         raise ValueError('No output specified for ocean basin proximity.')
-    
-    if (output_all_proximity_distances and
-        proximity_features_are_topological):
-        raise ValueError('Outputting all proximity distances not supported for topological features.')
     
     #tprof_0 = time_prof.perf_counter()
 
@@ -544,9 +520,6 @@ def proximity(
             proximity_shared_boundary_sections = []
             pygplates.resolve_topologies(proximity_features, rotation_model, proximity_resolved_topologies, time, proximity_shared_boundary_sections)
             
-            # 'output_all_proximity_distances' is required to be False for topological proximity features.
-            proximity_reconstructed_geometry_proxies = None
-            
             # Iterate over the shared boundary sections of all resolved topologies.
             proximity_reconstructed_geometries = []
             for proximity_shared_boundary_section in proximity_shared_boundary_sections:
@@ -567,16 +540,9 @@ def proximity(
             proximity_reconstructed_feature_geometries = []
             pygplates.reconstruct(proximity_features, rotation_model, proximity_reconstructed_feature_geometries, time)
             
-            if output_all_proximity_distances:
-                proximity_reconstructed_geometry_proxies = []
-            else:
-                proximity_reconstructed_geometry_proxies = None
-            
             proximity_reconstructed_geometries = []
             for proximity_reconstructed_feature_geometry in proximity_reconstructed_feature_geometries:
                 proximity_reconstructed_geometries.append(proximity_reconstructed_feature_geometry.get_reconstructed_geometry())
-                if proximity_reconstructed_geometry_proxies is not None:
-                    proximity_reconstructed_geometry_proxies.append(proximity_reconstructed_feature_geometry.get_feature())
     
         #tprof_c = time_prof.perf_counter()
         #tprof_reconstruct_proximity += tprof_c - tprof_b
@@ -611,115 +577,69 @@ def proximity(
             #tprof_iii = time_prof.perf_counter()
             #tprof_obstacle_resolve += tprof_iii - tprof_ii
             
-            #print('Creating obstacle grid...')
+            # Create obstacle grid.
             shortest_path_obstacle_grid = shortest_path_grid.create_obstacle_grid(obstacle_reconstructed_geometries)
         
             #tprof_iv = time_prof.perf_counter()
             #tprof_obstacle_create_obstacle_grid += tprof_iv - tprof_iii
 
-            #print('Creating distance grid...')
+            # Create distance grid.
             shortest_path_distance_grid = shortest_path_obstacle_grid.create_distance_grid(
                     proximity_reconstructed_geometries, proximity_distance_threshold_radians)
         
             #tprof_v = time_prof.perf_counter()
             #tprof_obstacle_create_distance_grid += tprof_v - tprof_iv
             
-            #print('Querying distances to {0} ocean points...'.format(len(ocean_basin_reconstructed_points)))
-            proximity_features_closest_to_ocean_basin_points = []
+            # Query distances to ocean points.
+            min_distances_to_ocean_basin_points = []
             for ocean_basin_reconstructed_point in ocean_basin_reconstructed_points:
-                distance = shortest_path_distance_grid.shortest_distance(ocean_basin_reconstructed_point)
-                if distance is None:
-                    proximity_features_closest_to_ocean_basin_points.append(None)
-                else:
-                    proximity_features_closest_to_ocean_basin_points.append((distance, None)) # Hack: proxy not used yet.
-            #print('...finished querying distances to ocean points.')
+                min_distance = shortest_path_distance_grid.shortest_distance(ocean_basin_reconstructed_point)
+                min_distances_to_ocean_basin_points.append(min_distance)  # note that 'min_distance' can be 'None'
         
             #tprof_vi = time_prof.perf_counter()
             #tprof_obstacle_calc_distances += tprof_vi - tprof_v
             
         else:
             # Find the minimum distance of each ocean basin point to all proximity reconstructed geometries.
-            proximity_features_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
+            proximity_geometries_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
                     ocean_basin_reconstructed_points,
                     proximity_reconstructed_geometries,
-                    proximity_reconstructed_geometry_proxies,
-                    distance_threshold_radians = proximity_distance_threshold_radians,
-                    # Does each point get a list of all geometries within threshold distance (instead of just the closest) ? ...
-                    all_geometries = output_all_proximity_distances)
+                    distance_threshold_radians = proximity_distance_threshold_radians)
+            # Remove geometry proxies - just keep the min distances.
+            min_distances_to_ocean_basin_points = []
+            for proximity_geometry_closest_to_ocean_basin_point in proximity_geometries_closest_to_ocean_basin_points:
+                if proximity_geometry_closest_to_ocean_basin_point is not None:
+                    min_distance, _ = proximity_geometry_closest_to_ocean_basin_point
+                else:
+                    min_distance = None
+                min_distances_to_ocean_basin_points.append(min_distance)
     
         #tprof_d = time_prof.perf_counter()
         #tprof_calc_distances += tprof_d - tprof_c
         
         # Iterate over all reconstructed ocean basin points.
-        for ocean_basin_point_index, proximity_feature_closest_to_ocean_basin_point in enumerate(proximity_features_closest_to_ocean_basin_points):
+        for ocean_basin_point_index, min_distance_to_ocean_basin_point in enumerate(min_distances_to_ocean_basin_points):
             
-            # Mapping of proximity feature names to proximity distances (in radians).
-            # The special key 'None' is associated with the *nearest* proximity distance over *all* proximity features.
-            ocean_basin_proximities = {}
-            
-            if output_all_proximity_distances:
-                if proximity_feature_closest_to_ocean_basin_point is not None:
-                    # 'proximity_feature_closest_to_ocean_basin_point' is actually a list of all proximity features
-                    # within the distance threshold of the current ocean basin point (not just the closest proximity feature).
-                    proximity_features_closest_to_ocean_basin_point = proximity_feature_closest_to_ocean_basin_point
-                    
-                    # The minimum distance of the current ocean basin point to all reconstructed proximity features.
-                    min_distance_to_all_proximity_features = None
-                    for min_distance_to_proximity_feature, proximity_feature in proximity_features_closest_to_ocean_basin_point:
-                        proximity_feature_name = proximity_feature.get_name()
-                        # Set proximity to the minimum distance to all features with the same name (if any).
-                        # A proximity feature may have more than one geometry (we choose the closest one for that feature).
-                        if proximity_feature_name in ocean_basin_proximities:
-                            if min_distance_to_proximity_feature < ocean_basin_proximities[proximity_feature_name]:
-                                ocean_basin_proximities[proximity_feature_name] = min_distance_to_proximity_feature
-                        else:
-                            ocean_basin_proximities[proximity_feature_name] = min_distance_to_proximity_feature
-                        
-                        # If the current feature is the closest of all the features so far.
-                        if (min_distance_to_all_proximity_features is None or
-                                min_distance_to_proximity_feature < min_distance_to_all_proximity_features):
-                            min_distance_to_all_proximity_features = min_distance_to_proximity_feature
-                # TODO... else:
-                
-                # Minimum distance to *all* proximity features is represented by 'None'.
-                ocean_basin_proximities[None] = min_distance_to_all_proximity_features
-            else:
-                if proximity_feature_closest_to_ocean_basin_point is not None:
-                    min_distance_to_all_proximity_features, _ = proximity_feature_closest_to_ocean_basin_point
-                else:
-                    # All proximity geometries are unreachable or further than distance threshold.
-                    # Use longest great circle distance between two points on the globe to represent this.
-                    min_distance_to_all_proximity_features = math.pi
-                # Minimum distance to *all* proximity features is represented by 'None'.
-                ocean_basin_proximities[None] = min_distance_to_all_proximity_features
+            if min_distance_to_ocean_basin_point is None:
+                # All proximity geometries are unreachable or further than distance threshold.
+                # Use longest great circle distance between two points on the globe to represent this.
+                min_distance_to_ocean_basin_point = math.pi
+            distance_in_kms = min_distance_to_ocean_basin_point * pygplates.Earth.mean_radius_in_kms
             
             # Extract the current ocean basin point parameters.
-            ocean_basin_paleo_lon_lat_point, ocean_basin_point_begin_time, ocean_basin_reconstructed_point = current_ocean_basin_point_infos[ocean_basin_point_index]
+            ocean_basin_paleo_lon_lat_point, _, ocean_basin_reconstructed_point = current_ocean_basin_point_infos[ocean_basin_point_index]
             
             if output_mean_distance or output_standard_deviation_distance:
                 # Update the distance statistics for the current ocean basin point.
-                ocean_basin_point_statistics = ocean_basin_points_statistics.setdefault(ocean_basin_paleo_lon_lat_point, {})
-                for proximity_feature_name, proximity in ocean_basin_proximities.items():
-                    proximity_in_kms = proximity * pygplates.Earth.mean_radius_in_kms
-                    num_distances, sum_distances, sum_square_distances = ocean_basin_point_statistics.setdefault(proximity_feature_name, (0, 0.0, 0.0))
-                    num_distances += 1
-                    sum_distances += proximity_in_kms
-                    sum_square_distances += proximity_in_kms * proximity_in_kms
-                    ocean_basin_point_statistics[proximity_feature_name] = (num_distances, sum_distances, sum_square_distances)
+                num_distances, sum_distances, sum_square_distances = ocean_basin_points_statistics.setdefault(ocean_basin_paleo_lon_lat_point, (0, 0.0, 0.0))
+                num_distances += 1
+                sum_distances += distance_in_kms
+                sum_square_distances += distance_in_kms * distance_in_kms
+                ocean_basin_points_statistics[ocean_basin_paleo_lon_lat_point] = (num_distances, sum_distances, sum_square_distances)
             
             if output_distance_with_time:
                 ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
-                
-                for proximity_feature_name, proximity in ocean_basin_proximities.items():
-                    # Group first by feature name and then by time.
-                    # This makes it easier to do the final writes to the output files.
-                    feature_proximity_data = proximity_data.get_feature_data(proximity_feature_name)
-                    feature_proximity_time_data = feature_proximity_data.get_time_data(time_index)
-                    
-                    feature_proximity_time_data.append((
-                        ocean_basin_reconstructed_lon,
-                        ocean_basin_reconstructed_lat,
-                        proximity * pygplates.Earth.mean_radius_in_kms))
+                proximity_data.get_time_data(time_index).append((ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat, distance_in_kms))
     
         #tprof_e = time_prof.perf_counter()
         #tprof_assemble_stats += tprof_e - tprof_d
@@ -727,16 +647,12 @@ def proximity(
     #tprof_5 = time_prof.perf_counter()
     
     if output_mean_distance or output_standard_deviation_distance:
-        for (ocean_basin_lon, ocean_basin_lat), ocean_basin_point_statistics in ocean_basin_points_statistics.items():
-            
-            for proximity_feature_name, (num_distances, sum_distances, sum_square_distances) in ocean_basin_point_statistics.items():
-                # Group by feature name. This makes it easier to do the final writes to the output files.
-                feature_proximity_data = proximity_data.get_feature_data(proximity_feature_name)
+        for (ocean_basin_lon, ocean_basin_lat), (num_distances, sum_distances, sum_square_distances) in ocean_basin_points_statistics.items():
                 
                 mean_distance = sum_distances / num_distances
                 
                 if output_mean_distance:
-                    feature_proximity_data.get_mean_data().append((ocean_basin_lon, ocean_basin_lat, mean_distance))
+                    proximity_data.get_mean_data().append((ocean_basin_lon, ocean_basin_lat, mean_distance))
                 
                 if output_standard_deviation_distance:
                     standard_deviation_distance_squared = (sum_square_distances / num_distances) - (mean_distance * mean_distance)
@@ -745,8 +661,7 @@ def proximity(
                         standard_deviation_distance = math.sqrt(standard_deviation_distance_squared)
                     else:
                         standard_deviation_distance = 0
-                    
-                    feature_proximity_data.get_std_dev_data().append((ocean_basin_lon, ocean_basin_lat, standard_deviation_distance))
+                    proximity_data.get_std_dev_data().append((ocean_basin_lon, ocean_basin_lat, standard_deviation_distance))
     
     #tprof_6 = time_prof.perf_counter()
 
@@ -804,7 +719,6 @@ def proximity_parallel(
         output_distance_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
-        output_all_proximity_distances,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
@@ -839,7 +753,6 @@ def proximity_parallel(
             output_distance_with_time,
             output_mean_distance,
             output_standard_deviation_distance,
-            output_all_proximity_distances,
             max_topological_reconstruction_time,
             continent_obstacle_filenames,
             anchor_plate_id,
@@ -882,7 +795,6 @@ def proximity_parallel(
                         output_distance_with_time,
                         output_mean_distance,
                         output_standard_deviation_distance,
-                        output_all_proximity_distances,
                         max_topological_reconstruction_time,
                         continent_obstacle_filenames,
                         anchor_plate_id,
@@ -895,7 +807,7 @@ def proximity_parallel(
         # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
         # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
         try:
-            pool_proximity_datas = pool_map_async_result.get(99999)
+            pool_proximity_datas = pool_map_async_result.get(999999)
         except KeyboardInterrupt:
             # Note: 'finally' block below gets executed before returning.
             return
@@ -914,7 +826,7 @@ def proximity_parallel(
             return
         proximity_data.update(pool_proximity_data)
     
-    return proximity_data;
+    return proximity_data
     
     
 def write_proximity_data(
@@ -927,67 +839,49 @@ def write_proximity_data(
         output_standard_deviation_distance,
         output_grd_files = None):
     
-    all_proximity_feature_data = proximity_data.get_all_feature_data()
-    for feature_name, proximity_feature_data in all_proximity_feature_data.items():
-        
-        if output_distance_with_time:
-            for time_index, proximity_feature_time_data in proximity_feature_data.get_all_time_data().items():
-                time = time_index * time_increment
-                if feature_name is not None:
-                    xyz_filename = '{0}_{1}_{2:0.2f}.{3}'.format(output_filename_prefix, feature_name, time, output_filename_extension)
-                    if output_grd_files:
-                        grd_filename = '{0}_{1}_{2:0.2f}.nc'.format(output_filename_prefix, feature_name, time)
-                else:
-                    xyz_filename = '{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
-                    if output_grd_files:
-                        grd_filename = '{0}_{1:0.2f}.nc'.format(output_filename_prefix, time)
-                
-                write_xyz_file(xyz_filename, proximity_feature_time_data)
-                if output_grd_files:
-                    grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-                    write_grd_file_from_xyz(
-                            grd_filename, xyz_filename, grid_spacing,
-                            num_grid_longitudes, num_grid_latitudes,
-                            # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
-                            use_nearneighbor=True)
-        
-        if output_mean_distance:
-            if feature_name is not None:
-                xyz_mean_distance_filename = '{0}_mean_distance_{1}.{2}'.format(output_filename_prefix, feature_name, output_filename_extension)
-                if output_grd_files:
-                    grd_mean_distance_filename = '{0}_mean_distance_{1}.nc'.format(output_filename_prefix, feature_name)
-            else:
-                xyz_mean_distance_filename = '{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
-                if output_grd_files:
-                    grd_mean_distance_filename = '{0}_mean_distance.nc'.format(output_filename_prefix)
-                
-            write_xyz_file(xyz_mean_distance_filename, proximity_feature_data.get_mean_data())
+    if output_distance_with_time:
+        for time_index, proximity_time_data in proximity_data.get_all_time_data().items():
+            time = time_index * time_increment
+            xyz_filename = '{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
+            if output_grd_files:
+                grd_filename = '{0}_{1:0.2f}.nc'.format(output_filename_prefix, time)
+            
+            write_xyz_file(xyz_filename, proximity_time_data)
             if output_grd_files:
                 grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
                 write_grd_file_from_xyz(
-                        grd_mean_distance_filename, xyz_mean_distance_filename,
-                        grid_spacing, num_grid_longitudes, num_grid_latitudes,
-                        # Using original (grid-aligned) points so don't near nearest neighbour filtering...
-                        use_nearneighbor=False)
-        
-        if output_standard_deviation_distance:
-            if feature_name is not None:
-                xyz_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.{2}'.format(output_filename_prefix, feature_name, output_filename_extension)
-                if output_grd_files:
-                    grd_standard_deviation_distance_filename = '{0}_std_dev_distance_{1}.nc'.format(output_filename_prefix, feature_name)
-            else:
-                xyz_standard_deviation_distance_filename = '{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
-                if output_grd_files:
-                    grd_standard_deviation_distance_filename = '{0}_std_dev_distance.nc'.format(output_filename_prefix)
-                
-            write_xyz_file(xyz_standard_deviation_distance_filename, proximity_feature_data.get_std_dev_data())
-            if output_grd_files:
-                grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-                write_grd_file_from_xyz(
-                        grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename,
-                        grid_spacing, num_grid_longitudes, num_grid_latitudes,
-                        # Using original (grid-aligned) points so don't near nearest neighbour filtering...
-                        use_nearneighbor=False)
+                        grd_filename, xyz_filename, grid_spacing,
+                        num_grid_longitudes, num_grid_latitudes,
+                        # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
+                        use_nearneighbor=True)
+    
+    if output_mean_distance:
+        xyz_mean_distance_filename = '{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
+        if output_grd_files:
+            grd_mean_distance_filename = '{0}_mean_distance.nc'.format(output_filename_prefix)
+            
+        write_xyz_file(xyz_mean_distance_filename, proximity_data.get_mean_data())
+        if output_grd_files:
+            grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
+            write_grd_file_from_xyz(
+                    grd_mean_distance_filename, xyz_mean_distance_filename,
+                    grid_spacing, num_grid_longitudes, num_grid_latitudes,
+                    # Using original (grid-aligned) points so don't near nearest neighbour filtering...
+                    use_nearneighbor=False)
+    
+    if output_standard_deviation_distance:
+        xyz_standard_deviation_distance_filename = '{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
+        if output_grd_files:
+            grd_standard_deviation_distance_filename = '{0}_std_dev_distance.nc'.format(output_filename_prefix)
+            
+        write_xyz_file(xyz_standard_deviation_distance_filename, proximity_data.get_std_dev_data())
+        if output_grd_files:
+            grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
+            write_grd_file_from_xyz(
+                    grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename,
+                    grid_spacing, num_grid_longitudes, num_grid_latitudes,
+                    # Using original (grid-aligned) points so don't near nearest neighbour filtering...
+                    use_nearneighbor=False)
 
 
 if __name__ == '__main__':
@@ -1006,28 +900,27 @@ if __name__ == '__main__':
     found for non-topological files, or all resolved boundary section features for topological boundary files,
     are tested for proximity to ocean basin points by default. To restrict to specific feature types
     specify the '-b' option (eg, for proximity to subduction zones specify '-b SubductionZone').
+
+    Optional continent obstacles can be specified that the shortest distance path must go around (ie, water flowing around continents, rather than through).
+    If specified then mid-ocean ridges and subduction zones of resolved topologies are also added as obstacles (that water, and hence sediment, cannot pass through).
+    If *not* specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
     
     The output can be any or all of the following:
-     1) For each time from present day to the maximum age of all ocean basin points (determined by the age grid) an output xyz file is
+     1) For each time from the paleo time of the age grid to the maximum age of all ocean basin points (determined by the age grid) an output xyz file is
         generated containing the reconstructed (lon, lat) point locations (as x,y) and the minimum distance to all proximity features (as z).
-     2) An output xyz file is generated containing 'present day' (lon, lat) ocean basin point locations (as x,y) and the mean distances
-        of each point to all proximity features averaged over the point's lifetime (as determined by the age grid). See the '-j' option.
-        A similar output xyz file can be generated containing standard deviation (instead of mean) distance. See the '-k' option.
-    
-    In addition to (1) and (2), equivalent xyz output files can be generated for each proximity feature. These are proximities to individual
-    features (rather than proximity to the nearest of all proximity feature as in (1) and (2)). See the '-u' option.
+     2) A single output xyz file is generated containing (lon, lat) ocean basin point locations (as x,y) (at the paleo time of the age grid) and
+        the mean distances of each point to all proximity features averaged over the point's lifetime (as determined by the age grid).
+        See the '-j' option. A similar output xyz file can be generated containing standard deviation (instead of mean) distance. See the '-k' option.
     And a GMT grd file can be generated for each xyz file. See the '-w' option.
     
-    If an ocean basin point falls outside the age grid then it is ignored. If the overriding plate of the nearest subduction line
-    (if requested) cannot be found for a particular geological time then the point is ignored for that time step
-    (in the output case (1) above). It is not ignored for output case (2) above (which does not involve overriding plates).
+    If an ocean basin point falls outside the age grid then it is ignored.
     
     A threshold distance can be specified to reject proximities exceeding it. See the '-q' option.
 
     NOTE: Separate the positional and optional arguments with '--' (workaround for bug in argparse module).
     For example...
 
-    python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid.nc -d -p -j -k -- input.xy output
+    python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid.nc -d -w -j -k -- input.xy output
      """
     
     try:
@@ -1042,21 +935,22 @@ if __name__ == '__main__':
         parser.add_argument('-m', '--proximity_filenames', type=str, nargs='+', required=True,
                 metavar='proximity_filename',
                 help='One or more proximity files to test proximity to the ocean basin points. '
-                'These can be topological or non-topological.')
+                     'These can be topological or non-topological.')
         parser.add_argument('-n', '--non_topological_proximity_features', action='store_true',
                 help='Whether the proximity features specified with (-m/--proximity_filenames) are non-topological. '
-                    'By default they are topological.')
+                     'By default they are topological.')
         parser.add_argument('-b', '--proximity_feature_types', type=str, nargs='+',
                 metavar='proximity_feature_type',
                 help='The feature type(s) to select proximity features. '
-                    'The format should match the format of '
-                    'http://www.gplates.org/docs/pygplates/generated/pygplates.FeatureType.html#pygplates.FeatureType.get_name . '
-                    'For example, proximity to subduction zones is specified as SubductionZone (without the gpml: prefix). '
-                    'Defaults to all proximity features (all resolved subsegments for topological features '
-                    'or all proximity reconstructed feature geometries for non-topological features).')
+                     'The format should match the format of '
+                     'http://www.gplates.org/docs/pygplates/generated/pygplates.FeatureType.html#pygplates.FeatureType.get_name . '
+                     'For example, proximity to subduction zones is specified as SubductionZone (without the gpml: prefix). '
+                     'Defaults to all proximity features (all resolved subsegments for topological features '
+                     'or all proximity reconstructed feature geometries for non-topological features).')
         parser.add_argument('-o', '--continent_obstacle_filenames', type=str, nargs='+',
                 metavar='continent_obstacle_filename',
                 help='Optional continent obstacles that the shortest distance path must go around (ie, water flowing around continents, rather than through). '
+                     'If specified then mid-ocean ridges and subduction zones of resolved topologies are also added as obstacles (that water, and hence sediment, cannot pass through). '
                      'If not specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries. '
                      'Obstacles can be both polygons and polylines. Default is no obstacles.')
         parser.add_argument('-s', '--topological_reconstruction_filenames', type=str, nargs='+', required=True,
@@ -1078,39 +972,32 @@ if __name__ == '__main__':
                 help='The time increment in My. Value must be an integer. Defaults to 1 My.')
         parser.add_argument('-q', '--max_distance', type=float,
                 help='The maximum distance in Kms. '
-                    'If specified then distances between ocean basin points and proximity features exceeding this threshold will be ignored '
-                    '(ocean basin point will not get output or will not contribute to mean / standard deviation), otherwise all distances are included.')
+                     'If specified then distances between ocean basin points and proximity features exceeding this threshold will be ignored '
+                     '(ocean basin point will not get output or will not contribute to mean / standard deviation), otherwise all distances are included.')
         parser.add_argument('-c', '--num_cpus', type=int,
                 help='The number of CPUs to use for calculations. Defaults to all available CPUs.')
         
         parser.add_argument('-d', '--output_distance_with_time', action='store_true',
                 help='For each input point at each time during its lifetime write its distance to the nearest feature. '
-                    'If no output options (excluding "output_all_proximity_distances") are specified then this one is used.')
+                     'If no output options are specified then this one is used.')
         parser.add_argument('-j', '--output_mean_distance', action='store_true',
                 help='For each input point write its mean distance to features averaged over its lifetime. '
-                    'By default it is not written.')
+                     'By default it is not written.')
         parser.add_argument('-k', '--output_std_dev_distance', action='store_true',
                 help='For each input point write its standard deviation of distances to features averaged over its lifetime. '
-                    'By default it is not written.')
-        parser.add_argument('-u', '--output_all_proximity_distances', action='store_true',
-                help='Also output distances to each feature (an extra distance for each feature name). '
-                    'This outputs extra files with a feature name embedded in each filename. '
-                    'This is in addition to outputting distances to nearest features. '
-                    'By default only distances to the nearest features are written. '
-                    'Can only be specified if "non_topological_proximity_features" is also specified '
-                    '(ie, only applies to non-topological features).')
+                     'By default it is not written.')
         parser.add_argument('-w', '--output_grd_files', action='store_true',
-                help='Also generate a grd file for each xyz file. '
-                    'By default only xyz files are written. '
-                    'Can only be specified if "ocean_basin_points_filename" is not specified '
-                    '(ie, ocean basin points must be on a uniform lon/lat grid).')
+                help='Also generate a grd file (".nc") for each xyz file. '
+                     'By default only xyz files are written. '
+                     'Can only be specified if "ocean_basin_points_filename" is not specified '
+                     '(ie, ocean basin points must be on a uniform lon/lat grid).')
         
         parser.add_argument('-i', '--ocean_basin_grid_spacing', type=float,
                 help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
-                    'The grid point latitudes/longitudes are offset by half the grid spacing '
-                    '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
-                    'Can only be specified if "ocean_basin_points_filename" is not specified. '
-                    'Defaults to {0} degrees.'.format(
+                     'The grid point latitudes/longitudes are offset by half the grid spacing '
+                     '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
+                     'Can only be specified if "ocean_basin_points_filename" is not specified. '
+                     'Defaults to {0} degrees.'.format(
                             DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
         
         def parse_unicode(value_string):
@@ -1119,8 +1006,8 @@ if __name__ == '__main__':
         parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
                 metavar='ocean_basin_points_filename',
                 help='Optional input xy file containing the ocean basin point locations. '
-                    'If not specified then a uniform lon/lat grid of points is generated. '
-                    'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_files" are not specified.')
+                     'If not specified then a uniform lon/lat grid of points is generated. '
+                     'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_files" are not specified.')
         
         parser.add_argument('output_filename_prefix', type=parse_unicode,
                 metavar='output_filename_prefix',
@@ -1137,11 +1024,6 @@ if __name__ == '__main__':
             not args.output_mean_distance and
             not args.output_std_dev_distance):
             args.output_distance_with_time = True
-        
-        if (args.output_all_proximity_distances and
-            not args.non_topological_proximity_features):
-            raise argparse.ArgumentTypeError(
-                "Can only specify 'output_all_proximity_distances' if 'non_topological_proximity_features' is also specified.")
         
         if args.ocean_basin_points_filename is not None:
             if args.ocean_basin_grid_spacing is not None:
@@ -1181,7 +1063,6 @@ if __name__ == '__main__':
                 args.output_distance_with_time,
                 args.output_mean_distance,
                 args.output_std_dev_distance,
-                args.output_all_proximity_distances,
                 args.max_topological_reconstruction_time,
                 args.continent_obstacle_filenames,
                 args.anchor_plate_id,
