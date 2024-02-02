@@ -302,7 +302,7 @@ if __name__ == '__main__':
         # Apparently if we use pool.map_async instead of pool.map and then get the results
         # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
         # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-        pool_map_async_result.get(99999)
+        pool_map_async_result.get(999999)
 
     else:
         for time in times:
@@ -391,7 +391,7 @@ if __name__ == '__main__':
         # Apparently if we use pool.map_async instead of pool.map and then get the results
         # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
         # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-        pool_map_async_result.get(99999)
+        pool_map_async_result.get(999999)
 
     else:
         for time in times:

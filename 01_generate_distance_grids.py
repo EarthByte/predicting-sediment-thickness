@@ -67,7 +67,6 @@ continent_obstacle_files = [
 ]
 
 # --- location of gplates files on your computer
-# DON'T FORGET TO UPDATE ocean_basin_proximity.py!
 # --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
 agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
 agegrid_filename_prefix = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
@@ -244,15 +243,14 @@ if __name__ == '__main__':
                 (
                     (
                         time,
-                    ) for time in range(min_time, max_time + 1, time_step)
-                    #) for time in range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
+                    ) for time in times
                 ),
                 1) # chunksize
 
         # Apparently if we use pool.map_async instead of pool.map and then get the results
         # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
         # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-        pool_map_async_result.get(99999)
+        pool_map_async_result.get(999999)
 
     else:
         for time in times:
