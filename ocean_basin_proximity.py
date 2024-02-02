@@ -34,6 +34,8 @@ import shortest_path
 import subprocess
 import sys
 
+#import time as time_prof
+
 
 # Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
 DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES = 1
@@ -407,12 +409,14 @@ def proximity(
         proximity_features_are_topological):
         raise ValueError('Outputting all proximity distances not supported for topological features.')
     
+    #tprof_0 = time_prof.perf_counter()
+
     # Get the input point ages.
     lon_lat_age_list = get_positions_and_ages(input_points, age_grid_filename)
     if not lon_lat_age_list:
         # There are no input points inside the age grid (in non-masked regions).
         return
-    
+
     # For each ocean basin point (and associated age) create a tuple containing
     # ((paleo_lon, paleo_lat), time_of_appearance, paleo_point).
     ocean_basin_point_infos = []
@@ -421,11 +425,13 @@ def proximity(
         ocean_basin_point_infos.append(
                 ((lon, lat), age_grid_paleo_time + age, pygplates.PointOnSphere(lat, lon)))
     
+    #tprof_1 = time_prof.perf_counter()
+    
     rotation_model = pygplates.RotationModel(rotation_filenames, default_anchor_plate_id=anchor_plate_id)
     
     # Read/parse the proximity features once so we're not doing at each time iteration.
     proximity_features = pygplates.FeaturesFunctionArgument(proximity_filenames).get_features()
-    
+
     if proximity_feature_types:
         # Create pygplates.FeatureType's from the strings.
         # We do this here since pygplates' objects are not yet pickable
@@ -441,7 +447,11 @@ def proximity(
             proximity_features = [feature for feature in proximity_features
                     if feature.get_feature_type() in proximity_feature_types]
     
+    #tprof_2 = time_prof.perf_counter()
+    
     topology_reconstruction_features = pygplates.FeaturesFunctionArgument(topological_reconstruction_filenames).get_features()
+    
+    #tprof_3 = time_prof.perf_counter()
     
     stage_rotation_cache = StageRotationCache(rotation_model)
     
@@ -456,6 +466,20 @@ def proximity(
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
         obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
+    
+    #tprof_4 = time_prof.perf_counter()
+    
+    #tprof_reconstruct_time_step = 0.0
+    #tprof_topology_resolve_time_step = 0.0
+    #tprof_topology_reconstruct_time_step = 0.0
+    #tprof_reconstruct_proximity = 0.0
+    #tprof_calc_distances = 0.0
+    #tprof_assemble_stats = 0.0
+    #tprof_obstacle_reconstruct = 0.0
+    #tprof_obstacle_resolve = 0.0
+    #tprof_obstacle_create_obstacle_grid = 0.0
+    #tprof_obstacle_create_distance_grid = 0.0
+    #tprof_obstacle_calc_distances = 0.0
 
     # Iterate from paleo time until we exceed the maximum begin time of all ocean basin point locations.
     min_time_index = int(math.ceil(age_grid_paleo_time / time_increment))
@@ -472,9 +496,14 @@ def proximity(
         #print('Time {0}'.format(time))
             
         current_ocean_basin_point_infos = next_ocean_basin_point_infos
+    
+        #tprof_a = time_prof.perf_counter()
         
         # Reconstruct to the next time unless we're already at the last time.
         if time_index != max_time_index:
+
+            #tprof_a_0 = time_prof.perf_counter()
+            
             # Resolve our topological plate polygons.
             resolved_plate_boundaries = []
             pygplates.resolve_topologies(
@@ -483,6 +512,9 @@ def proximity(
                     resolved_plate_boundaries,
                     time,
                     resolve_topology_types=pygplates.ResolveTopologyType.boundary)
+    
+            #tprof_a_1 = time_prof.perf_counter()
+            #tprof_topology_resolve_time_step += tprof_a_1 - tprof_a_0
             
             next_ocean_basin_point_infos = []
             
@@ -495,6 +527,12 @@ def proximity(
                     stage_rotation_cache,
                     current_ocean_basin_point_infos,
                     next_ocean_basin_point_infos)
+    
+            #tprof_a_2 = time_prof.perf_counter()
+            #tprof_topology_reconstruct_time_step += tprof_a_2 - tprof_a_1
+    
+        #tprof_b = time_prof.perf_counter()
+        #tprof_reconstruct_time_step += tprof_b - tprof_a
         
         ocean_basin_reconstructed_points = [current_ocean_basin_point_info[2]
                 for current_ocean_basin_point_info in current_ocean_basin_point_infos]
@@ -539,12 +577,21 @@ def proximity(
                 proximity_reconstructed_geometries.append(proximity_reconstructed_feature_geometry.get_reconstructed_geometry())
                 if proximity_reconstructed_geometry_proxies is not None:
                     proximity_reconstructed_geometry_proxies.append(proximity_reconstructed_feature_geometry.get_feature())
+    
+        #tprof_c = time_prof.perf_counter()
+        #tprof_reconstruct_proximity += tprof_c - tprof_b
         
         if continent_obstacle_filenames:
+
+            #tprof_i = time_prof.perf_counter()
+
             obstacle_reconstructed_feature_geometries = []
             pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time)
             obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
                     for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
+        
+            #tprof_ii = time_prof.perf_counter()
+            #tprof_obstacle_reconstruct += tprof_ii - tprof_i
 
             topology_obstacle_feature_types = [pygplates.FeatureType.gpml_mid_ocean_ridge, pygplates.FeatureType.gpml_subduction_zone]
             #topology_obstacle_feature_types = None
@@ -560,12 +607,22 @@ def proximity(
                 
                 for topology_obstacle_shared_sub_segment in topology_obstacle_shared_boundary_section.get_shared_sub_segments():
                     obstacle_reconstructed_geometries.append(topology_obstacle_shared_sub_segment.get_resolved_geometry())
+        
+            #tprof_iii = time_prof.perf_counter()
+            #tprof_obstacle_resolve += tprof_iii - tprof_ii
             
             #print('Creating obstacle grid...')
             shortest_path_obstacle_grid = shortest_path_grid.create_obstacle_grid(obstacle_reconstructed_geometries)
+        
+            #tprof_iv = time_prof.perf_counter()
+            #tprof_obstacle_create_obstacle_grid += tprof_iv - tprof_iii
+
             #print('Creating distance grid...')
             shortest_path_distance_grid = shortest_path_obstacle_grid.create_distance_grid(
                     proximity_reconstructed_geometries, proximity_distance_threshold_radians)
+        
+            #tprof_v = time_prof.perf_counter()
+            #tprof_obstacle_create_distance_grid += tprof_v - tprof_iv
             
             #print('Querying distances to {0} ocean points...'.format(len(ocean_basin_reconstructed_points)))
             proximity_features_closest_to_ocean_basin_points = []
@@ -576,6 +633,9 @@ def proximity(
                 else:
                     proximity_features_closest_to_ocean_basin_points.append((distance, None)) # Hack: proxy not used yet.
             #print('...finished querying distances to ocean points.')
+        
+            #tprof_vi = time_prof.perf_counter()
+            #tprof_obstacle_calc_distances += tprof_vi - tprof_v
             
         else:
             # Find the minimum distance of each ocean basin point to all proximity reconstructed geometries.
@@ -586,6 +646,9 @@ def proximity(
                     distance_threshold_radians = proximity_distance_threshold_radians,
                     # Does each point get a list of all geometries within threshold distance (instead of just the closest) ? ...
                     all_geometries = output_all_proximity_distances)
+    
+        #tprof_d = time_prof.perf_counter()
+        #tprof_calc_distances += tprof_d - tprof_c
         
         # Iterate over all reconstructed ocean basin points.
         for ocean_basin_point_index, proximity_feature_closest_to_ocean_basin_point in enumerate(proximity_features_closest_to_ocean_basin_points):
@@ -658,6 +721,11 @@ def proximity(
                         ocean_basin_reconstructed_lat,
                         proximity * pygplates.Earth.mean_radius_in_kms))
     
+        #tprof_e = time_prof.perf_counter()
+        #tprof_assemble_stats += tprof_e - tprof_d
+    
+    #tprof_5 = time_prof.perf_counter()
+    
     if output_mean_distance or output_standard_deviation_distance:
         for (ocean_basin_lon, ocean_basin_lat), ocean_basin_point_statistics in ocean_basin_points_statistics.items():
             
@@ -679,6 +747,37 @@ def proximity(
                         standard_deviation_distance = 0
                     
                     feature_proximity_data.get_std_dev_data().append((ocean_basin_lon, ocean_basin_lat, standard_deviation_distance))
+    
+    #tprof_6 = time_prof.perf_counter()
+
+    #print(f"Read age grid: {tprof_1 - tprof_0:.2f} seconds")
+    #print(f"Read rotaton and proximity features: {tprof_2 - tprof_1:.2f} seconds")
+    #print(f"Read topology features: {tprof_3 - tprof_2:.2f} seconds")
+    #print(f"Read continent obstacle features: {tprof_4 - tprof_3:.2f} seconds")
+    #print(f"Reconstruct and calculate distances: {tprof_5 - tprof_4:.2f} seconds")
+    #if tprof_reconstruct_time_step:
+    #    print(f"  Reconstruct time steps: {tprof_reconstruct_time_step:.2f} seconds")
+    #if tprof_topology_resolve_time_step:
+    #    print(f"    Resolve topologies: {tprof_topology_resolve_time_step:.2f} seconds")
+    #if tprof_topology_reconstruct_time_step:
+    #    print(f"    Topology reconstruct time step: {tprof_topology_reconstruct_time_step:.2f} seconds")
+    #if tprof_reconstruct_proximity:
+    #    print(f"  Reconstruct proximity: {tprof_reconstruct_proximity:.2f} seconds")
+    #if tprof_calc_distances:
+    #    print(f"  Calculate distances: {tprof_calc_distances:.2f} seconds")
+    #if tprof_obstacle_reconstruct:
+    #    print(f"    Obstacle reconstruct: {tprof_obstacle_reconstruct:.2f} seconds")
+    #if tprof_obstacle_resolve:
+    #    print(f"    Obstacle resolve: {tprof_obstacle_resolve:.2f} seconds")
+    #if tprof_obstacle_create_obstacle_grid:
+    #    print(f"    Obstacle create obstacle grid: {tprof_obstacle_create_obstacle_grid:.2f} seconds")
+    #if tprof_obstacle_create_distance_grid:
+    #    print(f"    Obstacle create distance grid: {tprof_obstacle_create_distance_grid:.2f} seconds")
+    #if tprof_obstacle_calc_distances:
+    #    print(f"    Obstacle calculate distances: {tprof_obstacle_calc_distances:.2f} seconds")
+    #if tprof_assemble_stats:
+    #    print(f"  Assemble stats: {tprof_assemble_stats:.2f} seconds")
+    #print(f"Gather mean/std-dev stats: {tprof_6 - tprof_5:.2f} seconds")
     
     return proximity_data
 

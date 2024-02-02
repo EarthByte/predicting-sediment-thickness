@@ -226,8 +226,12 @@ def low_priority():
 
 
 if __name__ == '__main__':
-    
+
+    #import time as time_prof
+
     print('Generating distance grids...')
+    
+    #tprof_start = time_prof.perf_counter()
 
     times = range(min_time, max_time + 1, time_step)
     #times = range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
@@ -265,3 +269,6 @@ if __name__ == '__main__':
     else:
         for time in times:
             generate_distance_grid(time)
+    
+    #tprof_end = time_prof.perf_counter()
+    #print(f"Total time: {tprof_end - tprof_start:.2f} seconds")
