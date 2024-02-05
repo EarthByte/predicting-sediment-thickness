@@ -278,31 +278,38 @@ if __name__ == '__main__':
         else:
             raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
         
-        # Split the workload across the CPUs.
-        pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-        pool_map_async_result = pool.map_async(
-                generate_predicted_sedimentation_grid_parallel_pool_function,
-                (
+        try:
+            # Split the workload across the CPUs.
+            pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
+            pool_map_async_result = pool.map_async(
+                    generate_predicted_sedimentation_grid_parallel_pool_function,
                     (
-                        time,
-                        predict_sedimentation_script,
-                        scale_sedimentation_rate,
-                        mean_age,
-                        mean_distance,
-                        variance_age,
-                        variance_distance,
-                        max_age,
-                        max_distance,
-                        age_distance_polynomial_coefficients,
-                        output_dir
-                    ) for time in times
-                ),
-                1) # chunksize
+                        (
+                            time,
+                            predict_sedimentation_script,
+                            scale_sedimentation_rate,
+                            mean_age,
+                            mean_distance,
+                            variance_age,
+                            variance_distance,
+                            max_age,
+                            max_distance,
+                            age_distance_polynomial_coefficients,
+                            output_dir
+                        ) for time in times
+                    ),
+                    1) # chunksize
 
-        # Apparently if we use pool.map_async instead of pool.map and then get the results
-        # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-        # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-        pool_map_async_result.get(999999)
+            # Apparently if we use pool.map_async instead of pool.map and then get the results
+            # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+            # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+            pool_map_async_result.get(999999)
+        except KeyboardInterrupt:
+            # Note: 'finally' block below gets executed before returning.
+            pass
+        finally:
+            pool.close()
+            pool.join()
 
     else:
         for time in times:
@@ -367,31 +374,38 @@ if __name__ == '__main__':
         else:
             raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
         
-        # Split the workload across the CPUs.
-        pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-        pool_map_async_result = pool.map_async(
-                generate_predicted_sedimentation_grid_parallel_pool_function,
-                (
+        try:
+            # Split the workload across the CPUs.
+            pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
+            pool_map_async_result = pool.map_async(
+                    generate_predicted_sedimentation_grid_parallel_pool_function,
                     (
-                        time,
-                        predict_sedimentation_script,
-                        scale_sedimentation_rate,
-                        mean_age,
-                        mean_distance,
-                        variance_age,
-                        variance_distance,
-                        max_age,
-                        max_distance,
-                        age_distance_polynomial_coefficients,
-                        output_dir
-                    ) for time in times
-                ),
-                1) # chunksize
+                        (
+                            time,
+                            predict_sedimentation_script,
+                            scale_sedimentation_rate,
+                            mean_age,
+                            mean_distance,
+                            variance_age,
+                            variance_distance,
+                            max_age,
+                            max_distance,
+                            age_distance_polynomial_coefficients,
+                            output_dir
+                        ) for time in times
+                    ),
+                    1) # chunksize
 
-        # Apparently if we use pool.map_async instead of pool.map and then get the results
-        # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-        # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-        pool_map_async_result.get(999999)
+            # Apparently if we use pool.map_async instead of pool.map and then get the results
+            # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+            # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+            pool_map_async_result.get(999999)
+        except KeyboardInterrupt:
+            # Note: 'finally' block below gets executed before returning.
+            pass
+        finally:
+            pool.close()
+            pool.join()
 
     else:
         for time in times:

@@ -31,7 +31,6 @@ import ptt.utils.points_in_polygons as points_in_polygons
 import ptt.utils.proximity_query as proximity_query
 import pygplates
 import shortest_path
-import subprocess
 import sys
 
 #import time as time_prof
@@ -1084,6 +1083,8 @@ if __name__ == '__main__':
         
         sys.exit(0)
     
+    except KeyboardInterrupt:
+        pass
     except Exception as exc:
         print('ERROR: {0}'.format(exc), file=sys.stderr)
         # Uncomment this to print traceback to location of raised exception.
