@@ -119,7 +119,7 @@ if not os.path.exists(output_dir):
     os.mkdir(output_dir)
 
 # ----- 
-def generate_distance_grid(time):
+def generate_distance_grid(times):
     py_cmd='python3'
     if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
         py_cmd = 'python'
@@ -149,10 +149,14 @@ def generate_distance_grid(time):
     # Anchor plate ID.
     command_line.extend(['-a', '{}'.format(anchor_plate_id)])
 
-    # Age grid.
-    command_line.extend(['-g', '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext)])
-    # Age grid paleo time.
-    command_line.extend(['-y', '{}'.format(time)])
+    # Age grid filenames and paleo times.
+    age_grid_filenames_and_times = []
+    for time in times:
+        age_grid_filename = '{}/{}{:.1f}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, time, agegrid_filename_suffix, agegrid_filename_ext)
+        age_grid_filenames_and_times.append(age_grid_filename)
+        age_grid_filenames_and_times.append(str(time))
+    command_line.append('-g')
+    command_line.extend(age_grid_filenames_and_times)
 
     # Use all feature types in proximity file (according to Dietmar)...
     #command_line.extend(['-b', 'PassiveContinentalBoundary'])
@@ -184,9 +188,9 @@ def generate_distance_grid(time):
     command_line.extend(['-c', '1'])
 
     # Distance grids output filename prefix.
-    command_line.append('{}/distance_{}_{}'.format(output_dir, grid_spacing, time))
+    command_line.append('{}/distance_{}'.format(output_dir, grid_spacing))
     
-    print('Time:', time)
+    print('Times:', list(times))
     
     #print(' '.join(command_line))
     call_system_command(command_line)
@@ -197,22 +201,23 @@ def generate_distance_grid(time):
     # this way we can import them as time-dependent raster into GPlates version 2.0 and earlier.
     #
     
-    src_mean_distance_basename = '{}/distance_{}_{}_mean_distance'.format(output_dir, grid_spacing, time)
-    dst_mean_distance_basename = '{}/mean_distance_{}d_{}'.format(output_dir, grid_spacing, time)
-    
-    src_mean_distance_xy = src_mean_distance_basename + '.xy'
-    if os.access(src_mean_distance_xy, os.R_OK):
-        os.remove(src_mean_distance_xy)
-    
-    src_mean_distance_grid = src_mean_distance_basename + '.nc'
-    dst_mean_distance_grid = dst_mean_distance_basename + '.nc'
-    
-    if os.access(dst_mean_distance_grid, os.R_OK):
-        os.remove(dst_mean_distance_grid)
-    
-    # Clamp mean distances.
-    call_system_command(["gmt", "grdmath", "-fg", str(proximity_threshold_kms), src_mean_distance_grid, "MIN", "=", dst_mean_distance_grid])
-    os.remove(src_mean_distance_grid)
+    for time in  times:
+        src_mean_distance_basename = '{}/distance_{}_{}_mean_distance'.format(output_dir, grid_spacing, time)
+        dst_mean_distance_basename = '{}/mean_distance_{}d_{}'.format(output_dir, grid_spacing, time)
+        
+        src_mean_distance_xy = src_mean_distance_basename + '.xy'
+        if os.access(src_mean_distance_xy, os.R_OK):
+            os.remove(src_mean_distance_xy)
+        
+        src_mean_distance_grid = src_mean_distance_basename + '.nc'
+        dst_mean_distance_grid = dst_mean_distance_basename + '.nc'
+        
+        if os.access(dst_mean_distance_grid, os.R_OK):
+            os.remove(dst_mean_distance_grid)
+        
+        # Clamp mean distances.
+        call_system_command(["gmt", "grdmath", "-fg", str(proximity_threshold_kms), src_mean_distance_grid, "MIN", "=", dst_mean_distance_grid])
+        os.remove(src_mean_distance_grid)
 
 
 # Wraps around 'generate_distance_grid()' so can be used by multiprocessing.Pool.map()
@@ -260,6 +265,13 @@ if __name__ == '__main__':
     times = range(min_time, max_time + 1, time_step)
     #times = range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
 
+    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
+    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
+    # which needs to be repeated for each task (group of times) - this is because each age grid involves
+    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
+    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
+    min_num_age_grids_per_call = 10
+
     if use_all_cpus:
     
         # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
@@ -274,6 +286,26 @@ if __name__ == '__main__':
         else:
             raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
         
+        # Divide the input times (age grid paleo times) into sub-lists (each to be run on a separate process).
+        #
+        # We could reduce the number of tasks to the number of CPUs (ie, increase number of times per task).
+        # However some tasks might finish sooner than others leaving some CPUs under utilised. Conversely, we don't
+        # want the number of tasks to be too high otherwise the calculation sharing (mentioned above) is reduced.
+        # So we double the number of tasks (twice number of CPUs) as a good compromise.
+        num_tasks = 2 * num_cpus
+        
+        # Create the pool sub-lists of times.
+        times_sub_lists = []
+        num_times = len(times)
+        num_times_per_task = (num_times + num_tasks - 1) // num_tasks
+        if num_times_per_task < min_num_age_grids_per_call:
+            num_times_per_task = min_num_age_grids_per_call
+        task_start_time_index = 0
+        while task_start_time_index < num_times:
+            # Pass consecutive times into each process since the distance calculations are more efficient that way.
+            times_sub_lists.append(times[task_start_time_index : task_start_time_index + num_times_per_task])
+            task_start_time_index += num_times_per_task
+        
         try:
             # Split the workload across the CPUs.
             pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
@@ -281,8 +313,8 @@ if __name__ == '__main__':
                     generate_distance_grid_parallel_pool_function,
                     (
                         (
-                            time,
-                        ) for time in times
+                            times_sub_list,
+                        ) for times_sub_list in times_sub_lists
                     ),
                     1) # chunksize
             
@@ -298,8 +330,12 @@ if __name__ == '__main__':
             pool.join()
 
     else:
-        for time in times:
-            generate_distance_grid(time)
+        num_times = len(times)
+        start_time_index = 0
+        while start_time_index < num_times:
+            # Pass 'min_num_age_grids_per_call' consecutive times into each process since the distance calculations are more efficient that way.
+            generate_distance_grid(times[start_time_index : start_time_index + min_num_age_grids_per_call])
+            start_time_index += min_num_age_grids_per_call
     
     #tprof_end = time_prof.perf_counter()
     #print(f"Total time: {tprof_end - tprof_start:.2f} seconds")

@@ -55,7 +55,7 @@ def read_input_points(input_points_filename):
 
             # Need at least two strings per line (for latitude and longitude).
             if len(line_string_list) < 2:
-                print('WARNING: Line {0}: Ignoring point - line does not have at least two white-space separated strings.'.format(
+                print('WARNING: Line {}: Ignoring point - line does not have at least two white-space separated strings.'.format(
                         line_number), file=sys.stderr)
                 continue
 
@@ -65,7 +65,7 @@ def read_input_points(input_points_filename):
                 lon = float(line_string_list[0])
                 lat = float(line_string_list[1])
             except ValueError:
-                print('WARNING: Line {0}: Ignoring point - cannot read lon/lat values.'.format(line_number), file=sys.stderr)
+                print('WARNING: Line {}: Ignoring point - cannot read lon/lat values.'.format(line_number), file=sys.stderr)
                 continue
 
             input_points.append((lon, lat))
@@ -114,15 +114,15 @@ def generate_input_points_grid(grid_spacing_degrees):
 # Input points outside the age grid are ignored.
 def get_positions_and_ages(input_points, age_grid_filename):
     
-    input_points_data = ''.join('{0} {1}\n'.format(lon, lat) for lon, lat in input_points)
+    input_points_data = ''.join('{} {}\n'.format(lon, lat) for lon, lat in input_points)
     
     stdout_data = call_system_command(
             # The command-line strings to execute GMT 'grdtrack'...
-            ["gmt", "grdtrack", "-G{0}".format(age_grid_filename)],
+            ["gmt", "grdtrack", "-G{}".format(age_grid_filename)],
             stdin=input_points_data,
             return_stdout=True)
     
-    #print('Stdout: {0}'.format(stdout_data))
+    #print('Stdout: {}'.format(stdout_data))
     
     lon_lat_age_list = []
     
@@ -139,7 +139,7 @@ def get_positions_and_ages(input_points, age_grid_filename):
             continue
         
         if num_values < 3:
-            print('WARNING: Ignoring line "{0}" - has fewer than 3 white-space separated numbers.'.format(line), file=sys.stderr)
+            print('WARNING: Ignoring line "{}" - has fewer than 3 white-space separated numbers.'.format(line), file=sys.stderr)
             continue
             
         try:
@@ -152,11 +152,11 @@ def get_positions_and_ages(input_points, age_grid_filename):
             
             # If the point is outside the ocean basin region then the age grid will return 'NaN'.
             if math.isnan(age):
-                #print('WARNING: Ignoring line "{0}" - point is outside ocean basin (age grid).'.format(line), file=sys.stderr)
+                #print('WARNING: Ignoring line "{}" - point is outside ocean basin (age grid).'.format(line), file=sys.stderr)
                 continue
             
         except ValueError:
-            print('WARNING: Ignoring line "{0}" - cannot read floating-point lon, lat and age values.'.format(line), file=sys.stderr)
+            print('WARNING: Ignoring line "{}" - cannot read floating-point lon, lat and age values.'.format(line), file=sys.stderr)
             continue
         
         lon_lat_age_list.append((lon, lat, age))
@@ -170,12 +170,13 @@ def topology_reconstruct_time_step(
         time_increment,
         resolved_plate_boundaries,
         stage_rotation_cache,
-        curr_point_infos,
-        next_point_infos):
+        curr_point_infos):
     #
     # The following code comment is the *slower* version of point-in-polygon testing.
     #
     
+    #    next_point_infos = []
+    #
     #    for point_feature, point_begin_time, curr_recon_point in curr_point_infos:
     #        plate_id = None
     #        for resolved_plate_boundary in resolved_plate_boundaries:
@@ -194,6 +195,8 @@ def topology_reconstruct_time_step(
     #        next_recon_point = stage_rotation * curr_recon_point
     #        
     #        next_point_infos.append((point_feature, point_begin_time, next_recon_point))
+    #
+    #    return next_point_infos
     
     #
     # The following code is the *faster* version of the above point-in-polygon code.
@@ -213,13 +216,19 @@ def topology_reconstruct_time_step(
         curr_existing_recon_points.append(curr_existing_recon_point)
         
         curr_existing_point_infos.append(curr_point_info)
+    
+    # Return empty list if 'time + time_increment' is older than oldest time of appearance of all points.
+    if not curr_existing_point_infos:
+        return []
         
     # Find the polygon plates containing the points.
     resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
             for resolved_plate_boundary in resolved_plate_boundaries]
     resolved_plate_boundaries_containing_points = points_in_polygons.find_polygons(
             curr_existing_recon_points, resolved_plate_polygons, resolved_plate_boundaries)
-    
+
+    next_point_infos = []
+
     # Iterate over the point-in-polygon results.
     for point_index, resolved_plate_boundary in enumerate(resolved_plate_boundaries_containing_points):
         if resolved_plate_boundary is None:
@@ -234,6 +243,8 @@ def topology_reconstruct_time_step(
         next_recon_point = stage_rotation * curr_recon_point
         
         next_point_infos.append((curr_paleo_lon_lat_point, point_begin_time, next_recon_point))
+    
+    return next_point_infos
 
 
 def write_xyz_file(output_filename, output_data):
@@ -252,18 +263,18 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 "nearneighbor",
                 xyz_filename,
                 "-N4/1", # Divide search radius into 4 sectors but only require a value in 1 sector.
-                "-S{0}d".format(0.7 * grid_spacing),
-                "-I{0}".format(grid_spacing),
+                "-S{}d".format(0.7 * grid_spacing),
+                "-I{}".format(grid_spacing),
                 # Use GMT gridline registration since our input point grid has data points on the grid lines.
                 # Gridline registration is the default so we don't need to force pixel registration...
                 # "-r", # Force pixel registration since data points are at centre of cells.
-                "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
-                #"-R{0}/{1}/{2}/{3}".format(
+                "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
+                #"-R{}/{}/{}/{}".format(
                 #        -180 + 0.5 * grid_spacing,
                 #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
                 #        -90 + 0.5 * grid_spacing,
                 #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
-                "-G{0}".format(grd_filename)]
+                "-G{}".format(grd_filename)]
     else:
         # The command-line strings to execute GMT 'xyz2grd'.
         # For example "xyz2grd output_mean_distance.xy -R-179.5/179.5/-89.5/89.5 -I1 -Goutput_mean_distance.nc".
@@ -271,17 +282,17 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 "gmt",
                 "xyz2grd",
                 xyz_filename,
-                "-I{0}".format(grid_spacing),
+                "-I{}".format(grid_spacing),
                 # Use GMT gridline registration since our input point grid has data points on the grid lines.
                 # Gridline registration is the default so we don't need to force pixel registration...
                 # "-r", # Force pixel registration since data points are at centre of cells.
                 "-R-180/180/-90/90",
-                #"-R{0}/{1}/{2}/{3}".format(
+                #"-R{}/{}/{}/{}".format(
                 #        -180 + 0.5 * grid_spacing,
                 #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
                 #        -90 + 0.5 * grid_spacing,
                 #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
-                "-G{0}".format(grd_filename)]
+                "-G{}".format(grd_filename)]
     
     call_system_command(gmt_command_line)
 
@@ -302,40 +313,99 @@ class StageRotationCache(object):
         return stage_rotation
 
 
-# Class to hold all proximity data.
+# Class to hold all proximity data for a specific age grid paleo time.
 class ProximityData(object):
-    def __init__(self):
-        self.time_data = {}
-        self.mean_data = []
-        self.std_dev_data = []
+
+    # Statistics to calculate mean/std-dev for a single ocean basin point.
+    class PointStatistics(object):
+        def __init__(self):
+            self.num_proximities = 0
+            self.sum_proximities = 0.0
+            self.sum_square_proximities = 0.0
+
+    def __init__(self, age_grid_paleo_time, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time):
+        self.age_grid_paleo_time = age_grid_paleo_time
+        self.output_mean_proximity = output_mean_proximity
+        self.output_standard_deviation_proximity = output_standard_deviation_proximity
+        self.output_proximity_with_time = output_proximity_with_time
+
+        # Map (ocean_basin_lon, ocean_basin_lat) to PointStatistics.
+        # These are used to accumulate proximity statistics for each ocean basin point over time.
+        if self.output_mean_proximity or self.output_standard_deviation_proximity:
+            self.points_statistics = {}
+            self.mean_data = []
+            self.std_dev_data = []
+            self.need_to_update_mean_data = False
+            self.need_to_update_std_dev_data = False
+        if self.output_proximity_with_time:
+            self.time_data = {}
     
-    # Return list of data tuples at specified time.
-    # Each tuple is (lon, lat, proximity)
-    # to write to the output file for the current 'time'.
-    def get_time_data(self, time_index):
-        return self.time_data.setdefault(time_index, [])
+    def add_proximity(self, proximity_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat):
+        # Update the proximity statistics for the current ocean basin point.
+        if self.output_mean_proximity or self.output_standard_deviation_proximity:
+            ocean_basin_lon_lat = ocean_basin_lon, ocean_basin_lat
+            point_statistics = self.points_statistics.setdefault(ocean_basin_lon_lat, self.PointStatistics())
+            point_statistics.num_proximities += 1
+            point_statistics.sum_proximities += proximity_in_kms
+            point_statistics.sum_square_proximities += proximity_in_kms * proximity_in_kms
+            # Mean and std-dev will need to be recalculated.
+            self.need_to_update_mean_data = True
+            self.need_to_update_std_dev_data = True
+        
+        # Add proximity for the current reconstructed point to a list for the reconstruction time.
+        if self.output_proximity_with_time:
+            self.time_data.setdefault(time, []).append((ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat, proximity_in_kms))
     
     # Return dict of all time data.
+    # Dict is a mapping of time to a list of (lon, lat, proximity) tuples.
     def get_all_time_data(self):
-        return self.time_data
+        if self.output_proximity_with_time:
+            return self.time_data
+        else:
+            return {}
     
     # Return list of mean statistics (over time) tuples.
-    # Each tuple is (lon, lat, mean)
+    # Each tuple is (lon, lat, mean).
     def get_mean_data(self):
-        return self.mean_data
+        if self.output_mean_proximity:
+            if self.need_to_update_mean_data:
+                # Calculate a mean proximity over time for each ocean basin point.
+                mean_data = []
+                for (ocean_basin_lon, ocean_basin_lat), point_statistics in self.points_statistics.items():
+                    mean_proximity = point_statistics.sum_proximities / point_statistics.num_proximities
+                    mean_data.append((ocean_basin_lon, ocean_basin_lat, mean_proximity))
+                
+                self.mean_data = mean_data
+                self.need_to_update_mean_data = False
+
+            return self.mean_data
+        else:
+            return []
     
     # Return list of standard deviation statistics (over time) tuples.
-    # Each tuple is (lon, lat, std_dev)
+    # Each tuple is (lon, lat, std_dev).
     def get_std_dev_data(self):
-        return self.std_dev_data
-    
-    # Merge other proximity data into us.
-    def update(self, other):
-        for time_index, other_time_data in other.get_all_time_data().items():
-            time_data = self.get_time_data(time_index)
-            time_data += other_time_data
-        self.mean_data += other.get_mean_data()
-        self.std_dev_data += other.get_std_dev_data()
+        if self.output_standard_deviation_proximity:
+            if self.need_to_update_std_dev_data:
+                # Calculate a standard deviation proximity over time for each ocean basin point.
+                std_dev_data = []
+                for (ocean_basin_lon, ocean_basin_lat), point_statistics in self.points_statistics.items():
+                    mean_proximity = point_statistics.sum_proximities / point_statistics.num_proximities
+                    
+                    standard_deviation_proximity_squared = (point_statistics.sum_square_proximities / point_statistics.num_proximities) - (mean_proximity * mean_proximity)
+                    # Ensure not negative due to numerical precision.
+                    if standard_deviation_proximity_squared > 0:
+                        standard_deviation_proximity = math.sqrt(standard_deviation_proximity_squared)
+                    else:
+                        standard_deviation_proximity = 0
+                    std_dev_data.append((ocean_basin_lon, ocean_basin_lat, standard_deviation_proximity))
+                
+                self.std_dev_data = std_dev_data
+                self.need_to_update_std_dev_data = False
+
+            return self.std_dev_data
+        else:
+            return []
 
 
 def proximity(
@@ -345,8 +415,7 @@ def proximity(
         proximity_features_are_topological,
         proximity_feature_types,
         topological_reconstruction_filenames,
-        age_grid_filename,
-        age_grid_paleo_time,
+        age_grid_filenames_and_paleo_times,
         time_increment,
         output_distance_with_time,
         output_mean_distance,
@@ -358,26 +427,33 @@ def proximity(
     """
     Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
     
-    If an ocean basin point falls outside the age grid (in masked region) then it is ignored.
+    If an ocean basin point falls outside an age grid (in masked region) then it is ignored.
 
     Ocean points are not reconstructed earlier than 'max_topological_reconstruction_time'
-    (each ocean point is reconstructed back to its age grid value or this value, whichever is smaller).
+    (each ocean point, for each age grid, is reconstructed back to its age grid value or 'max_topological_reconstruction_time', whichever is smaller).
     If it's 'None' then only the age grid limits how far back each point is reconstructed.
 
     Continent obstacle filenames can optionally be specified. If they are specified then they will form geometry obstacles that the
     shortest distance path must go around (ie, water must flow around continents). Obstacles can be both polygons and polylines.
     
     A threshold distance can be specified to reject proximities exceeding it.
+
+    The age grids and their paleo times are specified with 'age_grid_filenames_and_paleo_times' which should be a sequence of 2-tuples (filename, time).
+    You can specify more than one age grid, and hence generate more than one returned ProximityData object, because processing multiple age grids together
+    reduces the running time compared to processing them individually. If there's not enough age grids processed together
+    (and preferably grids with similar paleo times) then we'll spend too much time resolving/reconstructing proximity features
+    (and generating shortest path obstacle grids). This is because each age grid involves reconstructing all its ocean points back in time until they disappear
+    (at mid-ocean ridge) and so there's a lot of overlap in time across the age grids (where calculations can be shared if processed together).
     
-    The proximity results are returned in a single ProximityData object.
-    Returns None if all input points are outside the age grid (in masked regions).
+    The proximity results are returned in as a dict mapping age grid paleo times to ProximityData objects.
+    An age grid paleo time will be missing from the dict if all input points are outside the associated age grid (in masked regions).
     """
     
     if time_increment <= 0:
-        raise ValueError('The time increment "{0}" is not positive and non-zero.'.format(time_increment))
+        raise ValueError('The time increment "{}" is not positive and non-zero.'.format(time_increment))
     
-    if age_grid_paleo_time < 0:
-        raise ValueError('The age grid paleo time "{0}" is not positive or zero.'.format(age_grid_paleo_time))
+    if any(age_grid_paleo_time < 0 for _, age_grid_paleo_time in age_grid_filenames_and_paleo_times):
+        raise ValueError('Age grid paleo time must not be negative.')
     
     if (not output_distance_with_time and
         not output_mean_distance and
@@ -385,22 +461,6 @@ def proximity(
         raise ValueError('No output specified for ocean basin proximity.')
     
     #tprof_0 = time_prof.perf_counter()
-
-    # Get the input point ages.
-    lon_lat_age_list = get_positions_and_ages(input_points, age_grid_filename)
-    if not lon_lat_age_list:
-        # There are no input points inside the age grid (in non-masked regions).
-        return
-
-    # For each ocean basin point (and associated age) create a tuple containing
-    # ((paleo_lon, paleo_lat), time_of_appearance, paleo_point).
-    ocean_basin_point_infos = []
-    for lon, lat, age in lon_lat_age_list:
-        # List of 3-tuples (point_feature, point_begin_time, point).
-        ocean_basin_point_infos.append(
-                ((lon, lat), age_grid_paleo_time + age, pygplates.PointOnSphere(lat, lon)))
-    
-    #tprof_1 = time_prof.perf_counter()
     
     rotation_model = pygplates.RotationModel(rotation_filenames, default_anchor_plate_id=anchor_plate_id)
     
@@ -422,95 +482,108 @@ def proximity(
             proximity_features = [feature for feature in proximity_features
                     if feature.get_feature_type() in proximity_feature_types]
     
-    #tprof_2 = time_prof.perf_counter()
-    
     topology_reconstruction_features = pygplates.FeaturesFunctionArgument(topological_reconstruction_filenames).get_features()
     
-    #tprof_3 = time_prof.perf_counter()
-    
     stage_rotation_cache = StageRotationCache(rotation_model)
-    
-    if output_mean_distance or output_standard_deviation_distance:
-        # Create a dictionary mapping each ocean basin point (lat/lon position) to its proximity statistics.
-        ocean_basin_points_statistics = { }
-    
-    # All proximity data to return to caller.
-    proximity_data = ProximityData()
     
     if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
         obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
+
+    # Class to manage reconstruction data for ocean basin points associated with a specific age grid / paleo time.
+    class OceanBasinReconstruction(object):
+        def __init__(self, lon_lat_age_list, age_grid_paleo_time):
+            # For each ocean basin point create a 3-tuple containing (lon-lat-point, time-of-appearance, initial-reconstructed-point).
+            # The initial reconstructed point will be updated as the ocean basin points are reconstructed back into time.
+            self.current_point_infos = [((lon, lat), age_grid_paleo_time + age, pygplates.PointOnSphere(lat, lon))
+                                        for lon, lat, age in lon_lat_age_list]
     
-    #tprof_4 = time_prof.perf_counter()
+    # Dict mapping age grid paleo time to OceanBasinReconstruction.
+    ocean_basin_reconstructions = {}
     
-    #tprof_reconstruct_time_step = 0.0
+    # All proximity data to return to caller.
+    # This is a dict mapping age grid paleo time to ProximityData.
+    proximity_datas = {}
+    
+    #tprof_init = time_prof.perf_counter()
+    
+    #tprof_initial_reconstruct_time_step = 0.0
     #tprof_topology_resolve_time_step = 0.0
     #tprof_topology_reconstruct_time_step = 0.0
     #tprof_reconstruct_proximity = 0.0
     #tprof_calc_distances = 0.0
-    #tprof_assemble_stats = 0.0
     #tprof_obstacle_reconstruct = 0.0
     #tprof_obstacle_resolve = 0.0
     #tprof_obstacle_create_obstacle_grid = 0.0
     #tprof_obstacle_create_distance_grid = 0.0
     #tprof_obstacle_calc_distances = 0.0
+    #tprof_reconstruct_time_step = 0.0
 
-    # Iterate from paleo time until we exceed the maximum begin time of all ocean basin point locations.
-    min_time_index = int(math.ceil(age_grid_paleo_time / time_increment))
-    max_time = max(ocean_basin_point_info[1] for ocean_basin_point_info in ocean_basin_point_infos)
-    if max_topological_reconstruction_time is not None:
-        # We cannot reconstruct further in the past than allowed by the topological reconstruction features.
-        if max_time > max_topological_reconstruction_time:
-            max_time = max_topological_reconstruction_time
-    max_time_index = int(math.trunc(max_time / time_increment))
-    next_ocean_basin_point_infos = ocean_basin_point_infos
-    for time_index in range(min_time_index, max_time_index + 1):
+    # List of age grids, sorted by increasing paleo time, that we've not yet started processing/reconstructing.
+    unprocessed_age_grid_filenames_and_paleo_times = sorted(age_grid_filenames_and_paleo_times, key=lambda grid_and_time: grid_and_time[1])
+
+    # Iterate from the minimum paleo time (of all age grids) until all ocean basin point locations (for all age grids) have disappeared.
+    time_index = int(math.ceil(unprocessed_age_grid_filenames_and_paleo_times[0][1] / time_increment))  # unprocessed age grids are sorted by paleo time
+    while True:
         
         time = time_index * time_increment
-        #print('Time {0}'.format(time))
-            
-        current_ocean_basin_point_infos = next_ocean_basin_point_infos
-    
-        #tprof_a = time_prof.perf_counter()
-        
-        # Reconstruct to the next time unless we're already at the last time.
-        if time_index != max_time_index:
+        #print('Time {}'.format(time))
 
-            #tprof_a_0 = time_prof.perf_counter()
-            
-            # Resolve our topological plate polygons.
-            resolved_plate_boundaries = []
-            pygplates.resolve_topologies(
-                    topology_reconstruction_features,
-                    rotation_model,
-                    resolved_plate_boundaries,
-                    time,
-                    resolve_topology_types=pygplates.ResolveTopologyType.boundary)
+        # We cannot reconstruct further in the past than allowed by the topological reconstruction features.
+        if (max_topological_reconstruction_time is not None and
+            time > max_topological_reconstruction_time):
+            break
     
-            #tprof_a_1 = time_prof.perf_counter()
-            #tprof_topology_resolve_time_step += tprof_a_1 - tprof_a_0
-            
-            next_ocean_basin_point_infos = []
-            
-            # Reconstruct the current ocean basin points from 'time' to 'time + time_increment'.
-            # The reconstructed points will be the current points in the next time step.
-            topology_reconstruct_time_step(
-                    time,
-                    time_increment,
-                    resolved_plate_boundaries,
-                    stage_rotation_cache,
-                    current_ocean_basin_point_infos,
-                    next_ocean_basin_point_infos)
-    
-            #tprof_a_2 = time_prof.perf_counter()
-            #tprof_topology_reconstruct_time_step += tprof_a_2 - tprof_a_1
-    
-        #tprof_b = time_prof.perf_counter()
-        #tprof_reconstruct_time_step += tprof_b - tprof_a
+        #tprof_initial_reconstruct_time_step_start = time_prof.perf_counter()
         
-        ocean_basin_reconstructed_points = [current_ocean_basin_point_info[2]
-                for current_ocean_basin_point_info in current_ocean_basin_point_infos]
+        # Add any age grids with a paleo-time younger (smaller) than the current time.
+        # We'll need to start reconstructing them back through time (as ocean basin reconstructions).
+        while (unprocessed_age_grid_filenames_and_paleo_times and
+               time >= unprocessed_age_grid_filenames_and_paleo_times[0][1]):
+            age_grid_filename, age_grid_paleo_time = unprocessed_age_grid_filenames_and_paleo_times.pop(0)
+
+            # Get the ages of the input points.
+            lon_lat_age_list = get_positions_and_ages(input_points, age_grid_filename)
+            # If there are input points inside the age grid (in non-masked regions) then create an ocean basin reconstruction,
+            # otherwise there will be no reconstruction associated with the current age grid.
+            if lon_lat_age_list:
+                ocean_basin_reconstruction = OceanBasinReconstruction(lon_lat_age_list, age_grid_paleo_time)
+                
+                # If the age grid paleo time does not coincide with a time step then reconstruct from the former to the latter.
+                # This can happen if the time interval is larger than 1 Myr.
+                if time > age_grid_paleo_time:
+                    # Resolve our topological plate polygons at the age grid paleo time.
+                    resolved_plate_boundaries = []
+                    pygplates.resolve_topologies(
+                            topology_reconstruction_features,
+                            rotation_model,
+                            resolved_plate_boundaries,
+                            age_grid_paleo_time,
+                            resolve_topology_types=pygplates.ResolveTopologyType.boundary)
+                    # Reconstruct the current ocean basin points from 'age_grid_paleo_time' to 'time'.
+                    ocean_basin_reconstruction.current_point_infos = topology_reconstruct_time_step(
+                            age_grid_paleo_time,
+                            time - age_grid_paleo_time,  # time increment
+                            resolved_plate_boundaries,
+                            stage_rotation_cache,
+                            ocean_basin_reconstruction.current_point_infos)
+                
+                if ocean_basin_reconstruction.current_point_infos:
+                    # Add to the ocean basin reconstructions currently in progress.
+                    ocean_basin_reconstructions[age_grid_paleo_time] = ocean_basin_reconstruction
+                    # Also create a ProximityData object for the new ocean basin reconstruction.
+                    proximity_datas[age_grid_paleo_time] = ProximityData(age_grid_paleo_time,
+                                                                         output_mean_distance, output_standard_deviation_distance, output_distance_with_time)
+        
+        # If there are no unprocessed age grids and no associated ocean basin reconstructions in progress then we're finished.
+        if (not unprocessed_age_grid_filenames_and_paleo_times and
+            not ocean_basin_reconstructions):
+            break
+     
+        #tprof_initial_reconstruct_time_step += time_prof.perf_counter() - tprof_initial_reconstruct_time_step_start
+   
+        #tprof_reconstruct_proximity_start = time_prof.perf_counter()
         
         if proximity_features_are_topological:
             # Resolve our topological plate polygons (and deforming networks) to the current 'time'.
@@ -543,8 +616,9 @@ def proximity(
             for proximity_reconstructed_feature_geometry in proximity_reconstructed_feature_geometries:
                 proximity_reconstructed_geometries.append(proximity_reconstructed_feature_geometry.get_reconstructed_geometry())
     
-        #tprof_c = time_prof.perf_counter()
-        #tprof_reconstruct_proximity += tprof_c - tprof_b
+        #tprof_reconstruct_proximity += time_prof.perf_counter() - tprof_reconstruct_proximity_start
+    
+        #tprof_calc_distances_start = time_prof.perf_counter()
         
         if continent_obstacle_filenames:
 
@@ -590,91 +664,105 @@ def proximity(
             #tprof_obstacle_create_distance_grid += tprof_v - tprof_iv
             
             # Query distances to ocean points.
-            min_distances_to_ocean_basin_points = []
-            for ocean_basin_reconstructed_point in ocean_basin_reconstructed_points:
-                min_distance = shortest_path_distance_grid.shortest_distance(ocean_basin_reconstructed_point)
-                min_distances_to_ocean_basin_points.append(min_distance)  # note that 'min_distance' can be 'None'
+            # Find the shortest path distance to each the ocean basin point in each age grid currently being reconstructed (to all proximity reconstructed geometries).
+            for age_grid_paleo_time, ocean_basin_reconstruction in ocean_basin_reconstructions.items():
+                proximity_data = proximity_datas[age_grid_paleo_time]
+
+                for (ocean_basin_lon, ocean_basin_lat), _, ocean_basin_reconstructed_point in ocean_basin_reconstruction.current_point_infos:
+
+                    # Find minimum distance.
+                    min_distance = shortest_path_distance_grid.shortest_distance(ocean_basin_reconstructed_point)
+                    if min_distance is None:
+                        # All proximity geometries are unreachable or further than distance threshold.
+                        # Use longest great circle distance between two points on the globe to represent this.
+                        min_distance = math.pi
+                    distance_in_kms = min_distance * pygplates.Earth.mean_radius_in_kms
+
+                    # Add minimum distance to proximity data.
+                    ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
+                    proximity_data.add_proximity(distance_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
         
             #tprof_vi = time_prof.perf_counter()
             #tprof_obstacle_calc_distances += tprof_vi - tprof_v
             
         else:
-            # Find the minimum distance of each ocean basin point to all proximity reconstructed geometries.
-            proximity_geometries_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
-                    ocean_basin_reconstructed_points,
-                    proximity_reconstructed_geometries,
-                    distance_threshold_radians = proximity_distance_threshold_radians)
-            # Remove geometry proxies - just keep the min distances.
-            min_distances_to_ocean_basin_points = []
-            for proximity_geometry_closest_to_ocean_basin_point in proximity_geometries_closest_to_ocean_basin_points:
-                if proximity_geometry_closest_to_ocean_basin_point is not None:
-                    min_distance, _ = proximity_geometry_closest_to_ocean_basin_point
-                else:
-                    min_distance = None
-                min_distances_to_ocean_basin_points.append(min_distance)
-    
-        #tprof_d = time_prof.perf_counter()
-        #tprof_calc_distances += tprof_d - tprof_c
-        
-        # Iterate over all reconstructed ocean basin points.
-        for ocean_basin_point_index, min_distance_to_ocean_basin_point in enumerate(min_distances_to_ocean_basin_points):
-            
-            if min_distance_to_ocean_basin_point is None:
-                # All proximity geometries are unreachable or further than distance threshold.
-                # Use longest great circle distance between two points on the globe to represent this.
-                min_distance_to_ocean_basin_point = math.pi
-            distance_in_kms = min_distance_to_ocean_basin_point * pygplates.Earth.mean_radius_in_kms
-            
-            # Extract the current ocean basin point parameters.
-            ocean_basin_paleo_lon_lat_point, _, ocean_basin_reconstructed_point = current_ocean_basin_point_infos[ocean_basin_point_index]
-            
-            if output_mean_distance or output_standard_deviation_distance:
-                # Update the distance statistics for the current ocean basin point.
-                num_distances, sum_distances, sum_square_distances = ocean_basin_points_statistics.setdefault(ocean_basin_paleo_lon_lat_point, (0, 0.0, 0.0))
-                num_distances += 1
-                sum_distances += distance_in_kms
-                sum_square_distances += distance_in_kms * distance_in_kms
-                ocean_basin_points_statistics[ocean_basin_paleo_lon_lat_point] = (num_distances, sum_distances, sum_square_distances)
-            
-            if output_distance_with_time:
-                ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
-                proximity_data.get_time_data(time_index).append((ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat, distance_in_kms))
-    
-        #tprof_e = time_prof.perf_counter()
-        #tprof_assemble_stats += tprof_e - tprof_d
-    
-    #tprof_5 = time_prof.perf_counter()
-    
-    if output_mean_distance or output_standard_deviation_distance:
-        for (ocean_basin_lon, ocean_basin_lat), (num_distances, sum_distances, sum_square_distances) in ocean_basin_points_statistics.items():
-                
-                mean_distance = sum_distances / num_distances
-                
-                if output_mean_distance:
-                    proximity_data.get_mean_data().append((ocean_basin_lon, ocean_basin_lat, mean_distance))
-                
-                if output_standard_deviation_distance:
-                    standard_deviation_distance_squared = (sum_square_distances / num_distances) - (mean_distance * mean_distance)
-                    # Ensure not negative due to numerical precision.
-                    if standard_deviation_distance_squared > 0:
-                        standard_deviation_distance = math.sqrt(standard_deviation_distance_squared)
-                    else:
-                        standard_deviation_distance = 0
-                    proximity_data.get_std_dev_data().append((ocean_basin_lon, ocean_basin_lat, standard_deviation_distance))
-    
-    #tprof_6 = time_prof.perf_counter()
+            # Find the minimum distance to each the ocean basin point in each age grid currently being reconstructed (to all proximity reconstructed geometries).
+            for age_grid_paleo_time, ocean_basin_reconstruction in ocean_basin_reconstructions.items():
 
-    #print(f"Read age grid: {tprof_1 - tprof_0:.2f} seconds")
-    #print(f"Read rotaton and proximity features: {tprof_2 - tprof_1:.2f} seconds")
-    #print(f"Read topology features: {tprof_3 - tprof_2:.2f} seconds")
-    #print(f"Read continent obstacle features: {tprof_4 - tprof_3:.2f} seconds")
-    #print(f"Reconstruct and calculate distances: {tprof_5 - tprof_4:.2f} seconds")
-    #if tprof_reconstruct_time_step:
-    #    print(f"  Reconstruct time steps: {tprof_reconstruct_time_step:.2f} seconds")
-    #if tprof_topology_resolve_time_step:
-    #    print(f"    Resolve topologies: {tprof_topology_resolve_time_step:.2f} seconds")
-    #if tprof_topology_reconstruct_time_step:
-    #    print(f"    Topology reconstruct time step: {tprof_topology_reconstruct_time_step:.2f} seconds")
+                # Find minimum distances.
+                ocean_basin_reconstructed_points = [point_info[2] for point_info in ocean_basin_reconstruction.current_point_infos]
+                proximity_geometries_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
+                        ocean_basin_reconstructed_points,
+                        proximity_reconstructed_geometries,
+                        distance_threshold_radians = proximity_distance_threshold_radians)
+                
+                # Add minimum distances to proximity data.
+                proximity_data = proximity_datas[age_grid_paleo_time]
+                for ocean_basin_point_index, proximity_geometry_closest_to_ocean_basin_point in enumerate(proximity_geometries_closest_to_ocean_basin_points):
+                    if proximity_geometry_closest_to_ocean_basin_point is not None:
+                        min_distance, _ = proximity_geometry_closest_to_ocean_basin_point
+                    else:
+                        # All proximity geometries are unreachable or further than distance threshold.
+                        # Use longest great circle distance between two points on the globe to represent this.
+                        min_distance = math.pi
+                    distance_in_kms = min_distance * pygplates.Earth.mean_radius_in_kms
+
+                    (ocean_basin_lon, ocean_basin_lat), _, ocean_basin_reconstructed_point = ocean_basin_reconstruction.current_point_infos[ocean_basin_point_index]
+                    ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
+                    proximity_data.add_proximity(distance_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
+    
+        #tprof_calc_distances += time_prof.perf_counter() - tprof_calc_distances_start
+    
+        #tprof_reconstruct_time_step_start = time_prof.perf_counter()
+        
+        # Reconstruct to the next time unless we're already at the last time.
+        if (max_topological_reconstruction_time is None or
+            time <= max_topological_reconstruction_time):
+
+            #tprof_a_0 = time_prof.perf_counter()
+            
+            # Resolve our topological plate polygons.
+            resolved_plate_boundaries = []
+            pygplates.resolve_topologies(
+                    topology_reconstruction_features,
+                    rotation_model,
+                    resolved_plate_boundaries,
+                    time,
+                    resolve_topology_types=pygplates.ResolveTopologyType.boundary)
+    
+            #tprof_a_1 = time_prof.perf_counter()
+            #tprof_topology_resolve_time_step += tprof_a_1 - tprof_a_0
+            
+            # Find the ocean basin points for the next time step.
+            # We do this for each age grid currently being reconstructed.
+            for age_grid_paleo_time in list(ocean_basin_reconstructions.keys()):  # copy dict keys since might remove them while iterating
+                ocean_basin_reconstruction = ocean_basin_reconstructions[age_grid_paleo_time]
+                # Reconstruct the current ocean basin points from 'time' to 'time + time_increment'.
+                # The reconstructed points will be the current points in the next time step.
+                ocean_basin_reconstruction.current_point_infos = topology_reconstruct_time_step(
+                        time,
+                        time_increment,
+                        resolved_plate_boundaries,
+                        stage_rotation_cache,
+                        ocean_basin_reconstruction.current_point_infos)
+                # If finished reconstructing ocean basin (for associated age grid) then remove from current reconstructions.
+                if not ocean_basin_reconstruction.current_point_infos:
+                    del ocean_basin_reconstructions[age_grid_paleo_time]
+    
+            #tprof_a_2 = time_prof.perf_counter()
+            #tprof_topology_reconstruct_time_step += tprof_a_2 - tprof_a_1
+    
+        #tprof_reconstruct_time_step += time_prof.perf_counter() - tprof_reconstruct_time_step_start
+        
+        # Increment the time (to the next time interval).
+        time_index += 1
+    
+    #tprof_reconstruct_and_calc_distances = time_prof.perf_counter()
+
+    #print(f"Read input data: {tprof_init - tprof_0:.2f} seconds")
+    #print(f"Reconstruct and calculate distances: {tprof_reconstruct_and_calc_distances - tprof_init:.2f} seconds")
+    #if tprof_initial_reconstruct_time_step:
+    #    print(f"  Initial reconstruct time step: {tprof_initial_reconstruct_time_step:.2f} seconds")
     #if tprof_reconstruct_proximity:
     #    print(f"  Reconstruct proximity: {tprof_reconstruct_proximity:.2f} seconds")
     #if tprof_calc_distances:
@@ -689,11 +777,14 @@ def proximity(
     #    print(f"    Obstacle create distance grid: {tprof_obstacle_create_distance_grid:.2f} seconds")
     #if tprof_obstacle_calc_distances:
     #    print(f"    Obstacle calculate distances: {tprof_obstacle_calc_distances:.2f} seconds")
-    #if tprof_assemble_stats:
-    #    print(f"  Assemble stats: {tprof_assemble_stats:.2f} seconds")
-    #print(f"Gather mean/std-dev stats: {tprof_6 - tprof_5:.2f} seconds")
+    #if tprof_reconstruct_time_step:
+    #    print(f"  Reconstruct time steps: {tprof_reconstruct_time_step:.2f} seconds")
+    #if tprof_topology_resolve_time_step:
+    #    print(f"    Resolve topologies: {tprof_topology_resolve_time_step:.2f} seconds")
+    #if tprof_topology_reconstruct_time_step:
+    #    print(f"    Topology reconstruct time step: {tprof_topology_reconstruct_time_step:.2f} seconds")
     
-    return proximity_data
+    return proximity_datas
 
 
 # Wraps around 'proximity()' so can be used by multiprocessing.Pool.map() which
@@ -712,8 +803,7 @@ def proximity_parallel(
         proximity_features_are_topological,
         proximity_feature_types,
         topological_reconstruction_filenames,
-        age_grid_filename,
-        age_grid_paleo_time,
+        age_grid_filenames_and_paleo_times,
         time_increment,
         output_distance_with_time,
         output_mean_distance,
@@ -746,8 +836,7 @@ def proximity_parallel(
             proximity_features_are_topological,
             proximity_feature_types,
             topological_reconstruction_filenames,
-            age_grid_filename,
-            age_grid_paleo_time,
+            age_grid_filenames_and_paleo_times,
             time_increment,
             output_distance_with_time,
             output_mean_distance,
@@ -756,24 +845,34 @@ def proximity_parallel(
             continent_obstacle_filenames,
             anchor_plate_id,
             proximity_distance_threshold_radians)
+
+    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
+    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
+    # which needs to be repeated for each task (group of times) - this is because each age grid involves
+    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
+    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
+    min_num_age_grids_per_call = 10
     
-    # Divide the input points into sub-lists (each to be run on a separate process).
-    # Give each task a reasonable number of points to process - if there's not enough input points
-    # per task then we'll spend too much time resolving/reconstructing proximity features
-    # (which needs to be repeated for each task of input points).
-    # So we could reduce the number of tasks (increase input points per task) to the number of CPUs.
-    # However some tasks might finish sooner than others leaving some CPUs under utilised.
-    # So we double the number of tasks (twice number of CPUs) to counteract this to some extent.
-    #num_tasks = max(2 * num_cpus, int(len(input_points) / 25000))
-    num_tasks = num_cpus
-    #print('num_tasks', num_tasks)
+    # Divide the input times (age grid paleo times) into sub-lists (each to be run on a separate process).
+    #
+    # We could reduce the number of tasks to the number of CPUs (ie, increase number of times per task).
+    # However some tasks might finish sooner than others leaving some CPUs under utilised. Conversely, we don't
+    # want the number of tasks to be too high otherwise the calculation sharing (mentioned above) is reduced.
+    # So we double the number of tasks (twice number of CPUs) as a good compromise.
+    num_tasks = 2 * num_cpus
     
-    # Create the pool sub-lists.
-    # The points in each sub-list are spread across the globe to help avoid some sub-lists
-    # falling mostly outside ocean basin regions, and hence not getting processed, resulting
-    # in some tasks progressing much faster than others.
-    pool_input_points_sub_lists = [input_points[i:len(input_points):num_tasks]
-            for i in range(num_tasks)]
+    # Create the pool sub-lists of times.
+    age_grid_filenames_and_paleo_times_sub_lists = []
+    num_times = len(age_grid_filenames_and_paleo_times)
+    num_times_per_task = (num_times + num_tasks - 1) // num_tasks
+    if num_times_per_task < min_num_age_grids_per_call:
+        num_times_per_task = min_num_age_grids_per_call
+    task_start_time_index = 0
+    while task_start_time_index < num_times:
+        # Pass consecutive times into each process since the distance calculations are more efficient that way.
+        age_grid_filenames_and_paleo_times_sub_lists.append(
+                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_times_per_task])
+        task_start_time_index += num_times_per_task
     
     # Split the workload across the CPUs.
     try:
@@ -782,14 +881,13 @@ def proximity_parallel(
                 proximity_parallel_pool_function,
                 (
                     (
-                        pool_input_points_sub_list,
+                        input_points,
                         rotation_filenames,
                         proximity_filenames,
                         proximity_features_are_topological,
                         proximity_feature_types,
                         topological_reconstruction_filenames,
-                        age_grid_filename,
-                        age_grid_paleo_time,
+                        age_grid_filenames_and_paleo_times_sub_list,
                         time_increment,
                         output_distance_with_time,
                         output_mean_distance,
@@ -798,7 +896,7 @@ def proximity_parallel(
                         continent_obstacle_filenames,
                         anchor_plate_id,
                         proximity_distance_threshold_radians
-                    ) for pool_input_points_sub_list in pool_input_points_sub_lists
+                    ) for age_grid_filenames_and_paleo_times_sub_list in age_grid_filenames_and_paleo_times_sub_lists
                 ),
                 1) # chunksize
         
@@ -815,35 +913,31 @@ def proximity_parallel(
         pool.join()
     
     #
-    # Extract and merge all proximity data from the pools.
+    # Merge all proximity data from the pools.
     #
-    
-    proximity_data = ProximityData()
+    proximity_datas = {}
     
     for pool_proximity_data in pool_proximity_datas:
-        if pool_proximity_data is None:
-            return
-        proximity_data.update(pool_proximity_data)
+        proximity_datas.update(pool_proximity_data)  # dict update
     
-    return proximity_data
+    return proximity_datas
     
     
 def write_proximity_data(
         proximity_data,
+        age_grid_paleo_time,
         output_filename_prefix,
         output_filename_extension,
-        time_increment,
         output_distance_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
         output_grd_files = None):
     
     if output_distance_with_time:
-        for time_index, proximity_time_data in proximity_data.get_all_time_data().items():
-            time = time_index * time_increment
-            xyz_filename = '{0}_{1:0.2f}.{2}'.format(output_filename_prefix, time, output_filename_extension)
+        for time, proximity_time_data in proximity_data.get_all_time_data().items():
+            xyz_filename = '{}_{}_{:0.2f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
             if output_grd_files:
-                grd_filename = '{0}_{1:0.2f}.nc'.format(output_filename_prefix, time)
+                grd_filename = '{}_{}_{:0.2f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
             
             write_xyz_file(xyz_filename, proximity_time_data)
             if output_grd_files:
@@ -855,9 +949,9 @@ def write_proximity_data(
                         use_nearneighbor=True)
     
     if output_mean_distance:
-        xyz_mean_distance_filename = '{0}_mean_distance.{1}'.format(output_filename_prefix, output_filename_extension)
+        xyz_mean_distance_filename = '{}_{}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
         if output_grd_files:
-            grd_mean_distance_filename = '{0}_mean_distance.nc'.format(output_filename_prefix)
+            grd_mean_distance_filename = '{}_{}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
             
         write_xyz_file(xyz_mean_distance_filename, proximity_data.get_mean_data())
         if output_grd_files:
@@ -869,9 +963,9 @@ def write_proximity_data(
                     use_nearneighbor=False)
     
     if output_standard_deviation_distance:
-        xyz_standard_deviation_distance_filename = '{0}_std_dev_distance.{1}'.format(output_filename_prefix, output_filename_extension)
+        xyz_standard_deviation_distance_filename = '{}_{}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
         if output_grd_files:
-            grd_standard_deviation_distance_filename = '{0}_std_dev_distance.nc'.format(output_filename_prefix)
+            grd_standard_deviation_distance_filename = '{}_{}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
             
         write_xyz_file(xyz_standard_deviation_distance_filename, proximity_data.get_std_dev_data())
         if output_grd_files:
@@ -886,6 +980,25 @@ def write_proximity_data(
 if __name__ == '__main__':
     
     import traceback
+        
+    # Action to parse a list of pairs of age grid filename and paleo time.
+    class AgeGridFilenameAndPaleoTimePairsAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            # Should be an even number of numbers.
+            if len(values) % 2 != 0:
+                parser.error('the pairs of age grid filename and paleo time must be supplied as *pairs* (ie, an even number of arguments)')
+            
+            list_of_age_grid_filename_and_paleo_time = []
+            try:
+                num_age_grids = len(values) // 2
+                for age_grid_index in range(num_age_grids):
+                    age_grid_filename = values[2 * age_grid_index]
+                    age_grid_paleo_time = int(values[2 * age_grid_index + 1])
+                    list_of_age_grid_filename_and_paleo_time.append((age_grid_filename, age_grid_paleo_time))
+            except ValueError:
+                raise argparse.ArgumentTypeError("encountered an age grid paleo time that is not an integer")
+
+            setattr(namespace, self.dest, list_of_age_grid_filename_and_paleo_time)
     
     __description__ = \
     """Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
@@ -904,7 +1017,7 @@ if __name__ == '__main__':
     If specified then mid-ocean ridges and subduction zones of resolved topologies are also added as obstacles (that water, and hence sediment, cannot pass through).
     If *not* specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
     
-    The output can be any or all of the following:
+    The output (for each input age grid) can be any or all of the following:
      1) For each time from the paleo time of the age grid to the maximum age of all ocean basin points (determined by the age grid) an output xyz file is
         generated containing the reconstructed (lon, lat) point locations (as x,y) and the minimum distance to all proximity features (as z).
      2) A single output xyz file is generated containing (lon, lat) ocean basin point locations (as x,y) (at the paleo time of the age grid) and
@@ -912,14 +1025,21 @@ if __name__ == '__main__':
         See the '-j' option. A similar output xyz file can be generated containing standard deviation (instead of mean) distance. See the '-k' option.
     And a GMT grd file can be generated for each xyz file. See the '-w' option.
     
-    If an ocean basin point falls outside the age grid then it is ignored.
+    If an ocean basin point falls outside an age grid then it is ignored.
     
     A threshold distance can be specified to reject proximities exceeding it. See the '-q' option.
+
+    Note that you can specify more than one age grid and hence generate more than one mean-distance grid, for example.
+    This is because processing multiple age grids together reduces the running time compared to processing them individually.
+    If there's not enough age grids processed together (and preferably grids with similar paleo times) then we'll
+    spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids).
+    This is because each age grid involves reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge)
+    and so there's a lot of overlap in time across the age grids (where calculations can be shared if processed together).
 
     NOTE: Separate the positional and optional arguments with '--' (workaround for bug in argparse module).
     For example...
 
-    python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid.nc -d -w -j -k -- input.xy output
+    python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid_0.nc 0 age_grid_1.nc 1 -d -w -j -k -- input.xy output
      """
     
     try:
@@ -961,12 +1081,10 @@ if __name__ == '__main__':
                      'Ocean points are not reconstructed earlier than this time '
                      '(each ocean point is reconstructed back to its age grid value or this value, whichever is smaller). '
                      'Value must be an integer. If not specified then only the age grid limits how far back each point is reconstructed.')
-        parser.add_argument('-g', '--age_grid_filename', type=str, required=True,
-                metavar='age_grid_filename',
-                help='The age grid filename used to find the begin age of each ocean basin point.')
-        parser.add_argument('-y', '--age_grid_paleo_time', type=int, required=True,
-                metavar='age_grid_paleo_time',
-                help='The time of the age grid in Ma. Value must be an integer.')
+        parser.add_argument('-g', '--age_grid_filenames_and_paleo_times', nargs='+', action=AgeGridFilenameAndPaleoTimePairsAction, required=True,
+                metavar='age_grid_filename age_grid_paleo_time',
+                help='One of more pairs of age grid filename and time of age grid (must be integer). '
+                     'Note that it is more efficient to process multiple age grids together, and best if their times are close together.')
         parser.add_argument('-t', '--time_increment', type=int, default=1,
                 help='The time increment in My. Value must be an integer. Defaults to 1 My.')
         parser.add_argument('-q', '--max_distance', type=float,
@@ -996,7 +1114,7 @@ if __name__ == '__main__':
                      'The grid point latitudes/longitudes are offset by half the grid spacing '
                      '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
                      'Can only be specified if "ocean_basin_points_filename" is not specified. '
-                     'Defaults to {0} degrees.'.format(
+                     'Defaults to {} degrees.'.format(
                             DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
         
         def parse_unicode(value_string):
@@ -1049,15 +1167,14 @@ if __name__ == '__main__':
                 # Exceeds circumference of Earth so no need for threshold.
                 proximity_distance_threshold_radians = None
         
-        proximity_data = proximity_parallel(
+        proximity_datas = proximity_parallel(
                 input_points,
                 args.rotation_filenames,
                 args.proximity_filenames,
                 not args.non_topological_proximity_features, # proximity_features_are_topological
                 args.proximity_feature_types,
                 args.topological_reconstruction_filenames,
-                args.age_grid_filename,
-                args.age_grid_paleo_time,
+                args.age_grid_filenames_and_paleo_times,
                 args.time_increment,
                 args.output_distance_with_time,
                 args.output_mean_distance,
@@ -1067,26 +1184,31 @@ if __name__ == '__main__':
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
                 args.num_cpus)
-
-        if proximity_data is None:
-            raise ValueError('All ocean basin points are outside the age grid (in masked regions).')
         
-        write_proximity_data(
-                proximity_data,
-                args.output_filename_prefix,
-                args.output_filename_extension,
-                args.time_increment,
-                args.output_distance_with_time,
-                args.output_mean_distance,
-                args.output_std_dev_distance,
-                (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
+        # Write the distance grid(s) associated with each input age grid.
+        for age_grid_filename, age_grid_paleo_time in args.age_grid_filenames_and_paleo_times:
+
+            proximity_data = proximity_datas.get(age_grid_paleo_time)  # lookup in dict
+            if not proximity_data:
+                print('WARNING: All ocean basin points are outside the age grid: {}'.format(age_grid_filename), file=sys.stderr)
+                continue
+
+            write_proximity_data(
+                    proximity_data,
+                    age_grid_paleo_time,
+                    args.output_filename_prefix,
+                    args.output_filename_extension,
+                    args.output_distance_with_time,
+                    args.output_mean_distance,
+                    args.output_std_dev_distance,
+                    (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
         
         sys.exit(0)
     
     except KeyboardInterrupt:
         pass
     except Exception as exc:
-        print('ERROR: {0}'.format(exc), file=sys.stderr)
+        print('ERROR: {}'.format(exc), file=sys.stderr)
         # Uncomment this to print traceback to location of raised exception.
         #traceback.print_exc()
         
