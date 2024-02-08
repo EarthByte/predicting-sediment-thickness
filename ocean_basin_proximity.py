@@ -329,11 +329,12 @@ def get_positions_and_ages(input_points, age_grid_filename):
 
 # Reconstruct points from 'time' to 'time + time_increment' using topologies.
 def topology_reconstruct_time_step(
+        ocean_basin_reconstruction,
         time,
         time_increment,
         resolved_plate_boundaries,
-        stage_rotation_cache,
-        curr_point_infos):
+        resolved_plate_polygons,
+        stage_rotation_cache):
     #
     # The following code comment is the *slower* version of point-in-polygon testing.
     #
@@ -368,60 +369,64 @@ def topology_reconstruct_time_step(
     cpu_profile.start_topology_reconstruct_time_step()
     cpu_profile.start_topology_reconstruct_time_step_deactivate()
     
-    # Remove any points that don't exist at 'time + time_increment'.
-    curr_existing_point_infos = []
-    curr_existing_recon_points = []
-    for curr_point_info in curr_point_infos:
-        point_begin_time = curr_point_info[1]
+    # Read OceanBasinReconstruction member variables into local variables.
+    point_ages = ocean_basin_reconstruction.point_ages
+    current_reconstructed_points = ocean_basin_reconstruction.current_reconstructed_points
+    current_point_indices = ocean_basin_reconstruction.current_point_indices
+
+    # Remove any reconstructed points that don't exist at 'time + time_increment'.
+    next_reconstructed_points = []
+    next_point_indices = []
+    for reconstructed_point_index, point_index in enumerate(current_point_indices):
         # Retire current point if the time we are reconstructing to ('time + time_increment')
         # is older (earlier than) than the point's time of appearance.
+        point_begin_time = point_ages[point_index]
         if time + time_increment > point_begin_time:
             continue
-        
-        curr_existing_recon_point = curr_point_info[2]
-        curr_existing_recon_points.append(curr_existing_recon_point)
-        
-        curr_existing_point_infos.append(curr_point_info)
+
+        next_reconstructed_points.append(current_reconstructed_points[reconstructed_point_index])
+        next_point_indices.append(point_index)
+
+    current_reconstructed_points = next_reconstructed_points
+    current_point_indices = next_point_indices
 
     cpu_profile.end_topology_reconstruct_time_step_deactivate()
     
-    # Return empty list if 'time + time_increment' is older than oldest time of appearance of all points.
-    if not curr_existing_point_infos:
-        cpu_profile.end_topology_reconstruct_time_step()
-        return []
+    # If their are any active points then reconstruct them to the next time step.
+    if current_reconstructed_points:
 
-    cpu_profile.start_topology_reconstruct_time_step_find_polygons()
+        cpu_profile.start_topology_reconstruct_time_step_find_polygons()
         
-    # Find the polygon plates containing the points.
-    resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
-            for resolved_plate_boundary in resolved_plate_boundaries]
-    resolved_plate_boundaries_containing_points = points_in_polygons.find_polygons(
-            curr_existing_recon_points, resolved_plate_polygons, resolved_plate_boundaries)
+        # Find the polygon plates containing the points.
+        resolved_plate_boundaries_containing_points = points_in_polygons.find_polygons(
+                current_reconstructed_points,
+                resolved_plate_polygons,
+                resolved_plate_boundaries)
 
-    cpu_profile.end_topology_reconstruct_time_step_find_polygons()
-    cpu_profile.start_topology_reconstruct_time_step_stage_rotations()
+        cpu_profile.end_topology_reconstruct_time_step_find_polygons()
+        cpu_profile.start_topology_reconstruct_time_step_stage_rotations()
 
-    next_point_infos = []
+        # Iterate over the point-in-polygon results.
+        for reconstructed_point_index, resolved_plate_boundary in enumerate(resolved_plate_boundaries_containing_points):
+            # If point is not within any resolved plate boundaries then don't move it.
+            if resolved_plate_boundary is None:
+                continue
+            
+            plate_id = resolved_plate_boundary.get_feature().get_reconstruction_plate_id()
+            
+            # Get the stage rotation from 'time' to 'time + time_increment'.
+            stage_rotation = stage_rotation_cache.get_stage_rotation(plate_id, time, time_increment)
+            
+            # Update the current reconstructed point position.
+            current_reconstructed_points[reconstructed_point_index] = stage_rotation * current_reconstructed_points[reconstructed_point_index]
 
-    # Iterate over the point-in-polygon results.
-    for point_index, resolved_plate_boundary in enumerate(resolved_plate_boundaries_containing_points):
-        if resolved_plate_boundary is None:
-            continue
-        
-        curr_paleo_lon_lat_point, point_begin_time, curr_recon_point = curr_existing_point_infos[point_index]
-        
-        plate_id = resolved_plate_boundary.get_feature().get_reconstruction_plate_id()
-        
-        # Get the stage rotation from 'time' to 'time + time_increment'.
-        stage_rotation = stage_rotation_cache.get_stage_rotation(plate_id, time, time_increment)
-        next_recon_point = stage_rotation * curr_recon_point
-        
-        next_point_infos.append((curr_paleo_lon_lat_point, point_begin_time, next_recon_point))
+        cpu_profile.end_topology_reconstruct_time_step_stage_rotations()
 
-    cpu_profile.end_topology_reconstruct_time_step_stage_rotations()
-    cpu_profile.end_topology_reconstruct_time_step()
+    # Write modified OceanBasinReconstruction member variables from local variables.
+    ocean_basin_reconstruction.current_reconstructed_points = current_reconstructed_points
+    ocean_basin_reconstruction.current_point_indices = current_point_indices
     
-    return next_point_infos
+    cpu_profile.end_topology_reconstruct_time_step()
 
 
 def write_xyz_file(output_filename, output_data):
@@ -493,38 +498,34 @@ class StageRotationCache(object):
 # Class to hold all proximity data for a specific age grid paleo time.
 class ProximityData(object):
 
-    # Statistics to calculate mean/std-dev for a single ocean basin point.
-    class PointStatistics(object):
-        def __init__(self):
-            self.num_proximities = 0
-            self.sum_proximities = 0.0
-            self.sum_square_proximities = 0.0
+    def __init__(self, point_lon_lats, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time):
+        self.point_lon_lats = point_lon_lats
 
-    def __init__(self, age_grid_paleo_time, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time):
-        self.age_grid_paleo_time = age_grid_paleo_time
         self.output_mean_proximity = output_mean_proximity
         self.output_standard_deviation_proximity = output_standard_deviation_proximity
         self.output_proximity_with_time = output_proximity_with_time
 
-        # Map (ocean_basin_lon, ocean_basin_lat) to PointStatistics.
-        # These are used to accumulate proximity statistics for each ocean basin point over time.
+        # Accumulate proximity statistics for each ocean basin point over time.
         if self.output_mean_proximity or self.output_standard_deviation_proximity:
-            self.points_statistics = {}
+            # Statistics to calculate mean/std-dev for a single ocean basin point.
+            # Each ocean basin point has (num_proximities, sum_proximities, sum_square_proximities) that start at zero.
+            self.point_statistics = [(0, 0.0, 0.0)] * len(self.point_lon_lats)
             self.mean_data = []
             self.std_dev_data = []
             self.need_to_update_mean_data = False
             self.need_to_update_std_dev_data = False
+        # Keep a record of all proximity over time.
         if self.output_proximity_with_time:
             self.time_data = {}
     
-    def add_proximity(self, proximity_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat):
+    def add_proximity(self, proximity_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat):
         # Update the proximity statistics for the current ocean basin point.
         if self.output_mean_proximity or self.output_standard_deviation_proximity:
-            ocean_basin_lon_lat = ocean_basin_lon, ocean_basin_lat
-            point_statistics = self.points_statistics.setdefault(ocean_basin_lon_lat, self.PointStatistics())
-            point_statistics.num_proximities += 1
-            point_statistics.sum_proximities += proximity_in_kms
-            point_statistics.sum_square_proximities += proximity_in_kms * proximity_in_kms
+            num_proximities, sum_proximities, sum_square_proximities = self.point_statistics[ocean_basin_point_index]
+            num_proximities += 1
+            sum_proximities += proximity_in_kms
+            sum_square_proximities += proximity_in_kms * proximity_in_kms
+            self.point_statistics[ocean_basin_point_index] = (num_proximities, sum_proximities, sum_square_proximities)
             # Mean and std-dev will need to be recalculated.
             self.need_to_update_mean_data = True
             self.need_to_update_std_dev_data = True
@@ -548,8 +549,12 @@ class ProximityData(object):
             if self.need_to_update_mean_data:
                 # Calculate a mean proximity over time for each ocean basin point.
                 mean_data = []
-                for (ocean_basin_lon, ocean_basin_lat), point_statistics in self.points_statistics.items():
-                    mean_proximity = point_statistics.sum_proximities / point_statistics.num_proximities
+                for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
+                    # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
+                    if num_proximities > 0:
+                        mean_proximity = sum_proximities / num_proximities
+
+                        ocean_basin_lon, ocean_basin_lat = self.point_lon_lats[point_index]
                     mean_data.append((ocean_basin_lon, ocean_basin_lat, mean_proximity))
                 
                 self.mean_data = mean_data
@@ -566,15 +571,19 @@ class ProximityData(object):
             if self.need_to_update_std_dev_data:
                 # Calculate a standard deviation proximity over time for each ocean basin point.
                 std_dev_data = []
-                for (ocean_basin_lon, ocean_basin_lat), point_statistics in self.points_statistics.items():
-                    mean_proximity = point_statistics.sum_proximities / point_statistics.num_proximities
+                for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
+                    # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
+                    if num_proximities > 0:
+                        mean_proximity = sum_proximities / num_proximities
                     
-                    standard_deviation_proximity_squared = (point_statistics.sum_square_proximities / point_statistics.num_proximities) - (mean_proximity * mean_proximity)
+                        standard_deviation_proximity_squared = (sum_square_proximities / num_proximities) - (mean_proximity * mean_proximity)
                     # Ensure not negative due to numerical precision.
                     if standard_deviation_proximity_squared > 0:
                         standard_deviation_proximity = math.sqrt(standard_deviation_proximity_squared)
                     else:
                         standard_deviation_proximity = 0
+                        
+                        ocean_basin_lon, ocean_basin_lat = self.point_lon_lats[point_index]
                     std_dev_data.append((ocean_basin_lon, ocean_basin_lat, standard_deviation_proximity))
                 
                 self.std_dev_data = std_dev_data
@@ -676,10 +685,27 @@ def proximity(
     # Class to manage reconstruction data for ocean basin points associated with a specific age grid / paleo time.
     class OceanBasinReconstruction(object):
         def __init__(self, lon_lat_age_list, age_grid_paleo_time):
-            # For each ocean basin point create a 3-tuple containing (lon-lat-point, time-of-appearance, initial-reconstructed-point).
-            # The initial reconstructed point will be updated as the ocean basin points are reconstructed back into time.
-            self.current_point_infos = [((lon, lat), age_grid_paleo_time + age, pygplates.PointOnSphere(lat, lon))
-                                        for lon, lat, age in lon_lat_age_list]
+            self.age_grid_paleo_time = age_grid_paleo_time
+
+            self.num_points = len(lon_lat_age_list)
+
+            # For each ocean basin point add lon-lat-point, time-of-appearance and initial-reconstructed-point to 3 separate lists.
+            # The initial reconstructed point will be updated as the ocean basin points are topologically reconstructed back into time.
+            # When a point is deactivated its entry is removed from 'current_reconstructed_points' and 'current_point_indices'
+            # such that their lengths will decrease (possibly to zero if all points have been deactivated).
+            self.point_lon_lats = []
+            self.point_ages = []
+            self.current_reconstructed_points = []
+            self.current_point_indices = []
+            for point_index, (lon, lat, age) in enumerate(lon_lat_age_list):
+                self.point_lon_lats.append((lon, lat))
+                self.point_ages.append(age_grid_paleo_time + age)
+                self.current_reconstructed_points.append(pygplates.PointOnSphere(lat, lon))
+                self.current_point_indices.append(point_index)
+        
+        def is_active(self):
+            # Return True if not all points have been deactivated.
+            return bool(self.current_reconstructed_points)
     
     # Dict mapping age grid paleo time to OceanBasinReconstruction.
     ocean_basin_reconstructions = {}
@@ -729,20 +755,26 @@ def proximity(
                             resolved_plate_boundaries,
                             age_grid_paleo_time,
                             resolve_topology_types=pygplates.ResolveTopologyType.boundary)
+                    resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
+                            for resolved_plate_boundary in resolved_plate_boundaries]
                     # Reconstruct the current ocean basin points from 'age_grid_paleo_time' to 'time'.
-                    ocean_basin_reconstruction.current_point_infos = topology_reconstruct_time_step(
+                    topology_reconstruct_time_step(
+                            ocean_basin_reconstruction,
                             age_grid_paleo_time,
                             time - age_grid_paleo_time,  # time increment
                             resolved_plate_boundaries,
-                            stage_rotation_cache,
-                            ocean_basin_reconstruction.current_point_infos)
+                            resolved_plate_polygons,
+                            stage_rotation_cache)
+                    del resolved_plate_boundaries  # free memory
+                    #print('Reconstructed initial age grid {} to time {}'.format(age_grid_paleo_time, time))
                 
-                if ocean_basin_reconstruction.current_point_infos:
+                if ocean_basin_reconstruction.is_active():
                     # Add to the ocean basin reconstructions currently in progress.
                     ocean_basin_reconstructions[age_grid_paleo_time] = ocean_basin_reconstruction
                     # Also create a ProximityData object for the new ocean basin reconstruction.
-                    proximity_datas[age_grid_paleo_time] = ProximityData(age_grid_paleo_time,
+                    proximity_datas[age_grid_paleo_time] = ProximityData(ocean_basin_reconstruction.point_lon_lats,
                                                                          output_mean_distance, output_standard_deviation_distance, output_distance_with_time)
+                    #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
         
         # If there are no unprocessed age grids and no associated ocean basin reconstructions in progress then we're finished.
         if (not unprocessed_age_grid_filenames_and_paleo_times and
@@ -773,6 +805,9 @@ def proximity(
                 for proximity_shared_sub_segment in proximity_shared_boundary_section.get_shared_sub_segments():
                     proximity_reconstructed_geometries.append(proximity_shared_sub_segment.get_resolved_geometry())
             
+            del proximity_resolved_topologies  # free memory
+            del proximity_shared_boundary_sections  # free memory
+            
         else: # non-topological features...
             
             # Reconstruct the non-topological features that exist at the current 'time'.
@@ -783,6 +818,8 @@ def proximity(
             for proximity_reconstructed_feature_geometry in proximity_reconstructed_feature_geometries:
                 proximity_reconstructed_geometries.append(proximity_reconstructed_feature_geometry.get_reconstructed_geometry())
 
+            del proximity_reconstructed_feature_geometries  # free memory
+    
         cpu_profile.end_reconstruct_proximity()
         cpu_profile.start_calculate_distances()
         
@@ -828,8 +865,7 @@ def proximity(
             for age_grid_paleo_time, ocean_basin_reconstruction in ocean_basin_reconstructions.items():
                 proximity_data = proximity_datas[age_grid_paleo_time]
 
-                for (ocean_basin_lon, ocean_basin_lat), _, ocean_basin_reconstructed_point in ocean_basin_reconstruction.current_point_infos:
-
+                for ocean_basin_reconstructed_point_index, ocean_basin_reconstructed_point in enumerate(ocean_basin_reconstruction.current_reconstructed_points):
                     # Find minimum distance.
                     min_distance = shortest_path_distance_grid.shortest_distance(ocean_basin_reconstructed_point)
                     if min_distance is None:
@@ -839,8 +875,18 @@ def proximity(
                     distance_in_kms = min_distance * pygplates.Earth.mean_radius_in_kms
 
                     # Add minimum distance to proximity data.
+                    ocean_basin_point_index = ocean_basin_reconstruction.current_point_indices[ocean_basin_reconstructed_point_index]
                     ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
-                    proximity_data.add_proximity(distance_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
+                    proximity_data.add_proximity(distance_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
+        
+            # Remove references - might help Python to deallocate these objects now.
+            del shortest_path_distance_grid
+            del shortest_path_obstacle_grid
+            del obstacle_reconstructed_feature_geometries
+            del obstacle_reconstructed_geometries
+            del topology_obstacle_resolved_topologies
+            del topology_obstacle_shared_boundary_sections
+            del proximity_reconstructed_geometries
         
             cpu_profile.end_calculate_obstacle_distances()
             
@@ -849,15 +895,14 @@ def proximity(
             for age_grid_paleo_time, ocean_basin_reconstruction in ocean_basin_reconstructions.items():
 
                 # Find minimum distances.
-                ocean_basin_reconstructed_points = [point_info[2] for point_info in ocean_basin_reconstruction.current_point_infos]
                 proximity_geometries_closest_to_ocean_basin_points = proximity_query.find_closest_geometries_to_points(
-                        ocean_basin_reconstructed_points,
+                        ocean_basin_reconstruction.current_reconstructed_points,
                         proximity_reconstructed_geometries,
                         distance_threshold_radians = proximity_distance_threshold_radians)
                 
                 # Add minimum distances to proximity data.
                 proximity_data = proximity_datas[age_grid_paleo_time]
-                for ocean_basin_point_index, proximity_geometry_closest_to_ocean_basin_point in enumerate(proximity_geometries_closest_to_ocean_basin_points):
+                for ocean_basin_reconstructed_point_index, proximity_geometry_closest_to_ocean_basin_point in enumerate(proximity_geometries_closest_to_ocean_basin_points):
                     if proximity_geometry_closest_to_ocean_basin_point is not None:
                         min_distance, _ = proximity_geometry_closest_to_ocean_basin_point
                     else:
@@ -866,9 +911,13 @@ def proximity(
                         min_distance = math.pi
                     distance_in_kms = min_distance * pygplates.Earth.mean_radius_in_kms
 
-                    (ocean_basin_lon, ocean_basin_lat), _, ocean_basin_reconstructed_point = ocean_basin_reconstruction.current_point_infos[ocean_basin_point_index]
+                    ocean_basin_point_index = ocean_basin_reconstruction.current_point_indices[ocean_basin_reconstructed_point_index]
+                    ocean_basin_reconstructed_point = ocean_basin_reconstruction.current_reconstructed_points[ocean_basin_reconstructed_point_index]
                     ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
-                    proximity_data.add_proximity(distance_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
+                    proximity_data.add_proximity(distance_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
+                
+                del proximity_geometries_closest_to_ocean_basin_points  # free memory
+                del proximity_reconstructed_geometries  # free memory
     
         cpu_profile.end_calculate_distances()
         cpu_profile.start_reconstruct_time_step()
@@ -887,6 +936,8 @@ def proximity(
                     resolved_plate_boundaries,
                     time,
                     resolve_topology_types=pygplates.ResolveTopologyType.boundary)
+            resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
+                    for resolved_plate_boundary in resolved_plate_boundaries]
     
             cpu_profile.end_topology_resolve_time_step()
             
@@ -896,15 +947,19 @@ def proximity(
                 ocean_basin_reconstruction = ocean_basin_reconstructions[age_grid_paleo_time]
                 # Reconstruct the current ocean basin points from 'time' to 'time + time_increment'.
                 # The reconstructed points will be the current points in the next time step.
-                ocean_basin_reconstruction.current_point_infos = topology_reconstruct_time_step(
+                topology_reconstruct_time_step(
+                        ocean_basin_reconstruction,
                         time,
                         time_increment,
                         resolved_plate_boundaries,
-                        stage_rotation_cache,
-                        ocean_basin_reconstruction.current_point_infos)
+                        resolved_plate_polygons,
+                        stage_rotation_cache)
                 # If finished reconstructing ocean basin (for associated age grid) then remove from current reconstructions.
-                if not ocean_basin_reconstruction.current_point_infos:
+                if not ocean_basin_reconstruction.is_active():
+                    #print('Finished age grid {} at time {}'.    format(age_grid_paleo_time, time))
                     del ocean_basin_reconstructions[age_grid_paleo_time]
+    
+            del resolved_plate_boundaries  # free memory
     
         cpu_profile.end_reconstruct_time_step()
         
@@ -1048,8 +1103,10 @@ def proximity_parallel(
     #
     proximity_datas = {}
     
-    for pool_proximity_data in pool_proximity_datas:
+    while pool_proximity_datas:
+        pool_proximity_data = pool_proximity_datas.pop()
         proximity_datas.update(pool_proximity_data)  # dict update
+        del pool_proximity_data  # free memory
     
     return proximity_datas
     
