@@ -49,7 +49,7 @@ class CpuProfile(object):
             self.time_usage_proximity = 0.0
             self.time_usage_read_input_data = 0.0
             self.time_usage_reconstruct_and_calculate_distances = 0.0
-            self.time_usage_initial_reconstruct_time_step = 0.0
+            self.time_usage_read_age_grid = 0.0
             self.time_usage_topology_resolve_time_step = 0.0
             self.time_usage_topology_reconstruct_time_step = 0.0
             self.time_usage_topology_reconstruct_time_step_deactivate = 0.0
@@ -83,12 +83,12 @@ class CpuProfile(object):
         if self.enable_profiling:
             self.time_usage_reconstruct_and_calculate_distances += self.profile() - self.time_snapshot_reconstruct_and_calculate_distances
     
-    def start_initial_reconstruct_time_step(self):
+    def start_read_age_grid(self):
         if self.enable_profiling:
-            self.time_snapshot_initial_reconstruct_time_step = self.profile()
-    def end_initial_reconstruct_time_step(self):
+            self.time_snapshot_read_age_grid = self.profile()
+    def end_read_age_grid(self):
         if self.enable_profiling:
-            self.time_usage_initial_reconstruct_time_step += self.profile() - self.time_snapshot_initial_reconstruct_time_step
+            self.time_usage_read_age_grid += self.profile() - self.time_snapshot_read_age_grid
     
     def start_reconstruct_proximity(self):
         if self.enable_profiling:
@@ -150,49 +150,50 @@ class CpuProfile(object):
     
     def start_topology_reconstruct_time_step_deactivate(self):
         if self.enable_profiling:
-            self.time_usage_start_topology_reconstruct_time_step_deactivate = self.profile()
+            self.time_snapshot_start_topology_reconstruct_time_step_deactivate = self.profile()
     def end_topology_reconstruct_time_step_deactivate(self):
         if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step_deactivate += self.profile() - self.time_usage_start_topology_reconstruct_time_step_deactivate
+            self.time_usage_topology_reconstruct_time_step_deactivate += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_deactivate
     
     def start_topology_reconstruct_time_step_find_polygons(self):
         if self.enable_profiling:
-            self.time_usage_start_topology_reconstruct_time_step_find_polygons = self.profile()
+            self.time_snapshot_start_topology_reconstruct_time_step_find_polygons = self.profile()
     def end_topology_reconstruct_time_step_find_polygons(self):
         if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step_find_polygons += self.profile() - self.time_usage_start_topology_reconstruct_time_step_find_polygons
+            self.time_usage_topology_reconstruct_time_step_find_polygons += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_find_polygons
     
     def start_topology_reconstruct_time_step_stage_rotations(self):
         if self.enable_profiling:
-            self.time_usage_start_topology_reconstruct_time_step_stage_rotations = self.profile()
+            self.time_snapshot_start_topology_reconstruct_time_step_stage_rotations = self.profile()
     def end_topology_reconstruct_time_step_stage_rotations(self):
         if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step_stage_rotations += self.profile() - self.time_usage_start_topology_reconstruct_time_step_stage_rotations
+            self.time_usage_topology_reconstruct_time_step_stage_rotations += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_stage_rotations
     
     def print_proximity_usage(self, age_grid_paleo_times):
         """Call at the end of proximity() to print its CPU usage."""
         if self.enable_profiling:
+            scale_to_seconds = 1e-9  # convert nanoseconds to seconds
             print( "proximity() CPU usage:")
             print(f"  Age grid paleo times: {age_grid_paleo_times}")
-            print(f"    Proximity: {self.time_usage_proximity:.2f} seconds")
-            print(f"      Read input data: {self.time_usage_read_input_data:.2f} seconds")
-            print(f"      Reconstruct and calculate distances: {self.time_usage_reconstruct_and_calculate_distances:.2f} seconds")
-            print(f"        Initial reconstruct time step: {self.time_usage_initial_reconstruct_time_step:.2f} seconds")
-            print(f"        Reconstruct proximity: {self.time_usage_reconstruct_proximity:.2f} seconds")
-            print(f"        Calculate distances: {self.time_usage_calculate_distances:.2f} seconds")
-            print(f"          Obstacle reconstruct/resolve: {self.time_usage_obstacle_reconstruct_resolve:.2f} seconds")
-            print(f"          Obstacle create obstacle grids: {self.time_usage_create_obstacle_grids:.2f} seconds")
-            print(f"          Obstacle calculate distances: {self.time_usage_calculate_obstacle_distances:.2f} seconds")
-            print(f"        Reconstruct time steps: {self.time_usage_reconstruct_time_step:.2f} seconds")
-            print(f"          Resolve topologies: {self.time_usage_topology_resolve_time_step:.2f} seconds")
-            print(f"          Topology reconstruct time step: {self.time_usage_topology_reconstruct_time_step:.2f} seconds")
-            print(f"            Topology reconstruct time step (deactivate): {self.time_usage_topology_reconstruct_time_step_deactivate:.2f} seconds")
-            print(f"            Topology reconstruct time step (points in polygons): {self.time_usage_topology_reconstruct_time_step_find_polygons:.2f} seconds")
-            print(f"            Topology reconstruct time step (stage rotations): {self.time_usage_topology_reconstruct_time_step_stage_rotations:.2f} seconds")
+            print(f"    Proximity: {self.time_usage_proximity * scale_to_seconds:.2f} seconds")
+            print(f"      Read input data: {self.time_usage_read_input_data * scale_to_seconds:.2f} seconds")
+            print(f"      Reconstruct and calculate distances: {self.time_usage_reconstruct_and_calculate_distances * scale_to_seconds:.2f} seconds")
+            print(f"        Read age grid: {self.time_usage_read_age_grid * scale_to_seconds:.2f} seconds")
+            print(f"        Reconstruct proximity: {self.time_usage_reconstruct_proximity * scale_to_seconds:.2f} seconds")
+            print(f"        Calculate distances: {self.time_usage_calculate_distances * scale_to_seconds:.2f} seconds")
+            print(f"          Obstacle reconstruct/resolve: {self.time_usage_obstacle_reconstruct_resolve * scale_to_seconds:.2f} seconds")
+            print(f"          Obstacle create obstacle grids: {self.time_usage_create_obstacle_grids * scale_to_seconds:.2f} seconds")
+            print(f"          Obstacle calculate distances: {self.time_usage_calculate_obstacle_distances * scale_to_seconds:.2f} seconds")
+            print(f"        Reconstruct time steps: {self.time_usage_reconstruct_time_step * scale_to_seconds:.2f} seconds")
+            print(f"          Resolve topologies: {self.time_usage_topology_resolve_time_step * scale_to_seconds:.2f} seconds")
+            print(f"          Topology reconstruct time step: {self.time_usage_topology_reconstruct_time_step * scale_to_seconds:.2f} seconds")
+            print(f"            Topology reconstruct time step (deactivate): {self.time_usage_topology_reconstruct_time_step_deactivate * scale_to_seconds:.2f} seconds")
+            print(f"            Topology reconstruct time step (points in polygons): {self.time_usage_topology_reconstruct_time_step_find_polygons * scale_to_seconds:.2f} seconds")
+            print(f"            Topology reconstruct time step (stage rotations): {self.time_usage_topology_reconstruct_time_step_stage_rotations * scale_to_seconds:.2f} seconds")
     
     @staticmethod
     def profile():
-        return time_profile.perf_counter()
+        return time_profile.perf_counter_ns()  # in nanoseconds
 
 # Profile CPU usage (currently just the profile() function).
 ENABLE_CPU_PROFILING = False
@@ -719,7 +720,7 @@ def proximity(
             time > max_topological_reconstruction_time):
             break
 
-        cpu_profile.start_initial_reconstruct_time_step()
+        cpu_profile.start_read_age_grid()
         
         # Add any age grids with a paleo-time younger (smaller) than the current time.
         # We'll need to start reconstructing them back through time (as ocean basin reconstructions).
@@ -766,12 +767,13 @@ def proximity(
                                                                          output_mean_distance, output_standard_deviation_distance, output_distance_with_time)
                     #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
         
+        cpu_profile.end_read_age_grid()
+        
         # If there are no unprocessed age grids and no associated ocean basin reconstructions in progress then we're finished.
         if (not unprocessed_age_grid_filenames_and_paleo_times and
             not ocean_basin_reconstructions):
             break
         
-        cpu_profile.end_initial_reconstruct_time_step()
         cpu_profile.start_reconstruct_proximity()
         
         if proximity_features_are_topological:
