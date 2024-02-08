@@ -33,7 +33,170 @@ import pygplates
 import shortest_path
 import sys
 
-#import time as time_prof
+import time as time_profile
+
+
+# Class to profile CPU usage.
+class CpuProfile(object):
+    def __init__(self, enable_profiling=False):
+        self.enable_profiling = enable_profiling
+    
+    def start_proximity(self):
+        """Call at the start of proximity()."""
+        if self.enable_profiling:
+            self.time_snapshot_start_proximity = self.profile()
+
+            self.time_usage_proximity = 0.0
+            self.time_usage_read_input_data = 0.0
+            self.time_usage_reconstruct_and_calculate_distances = 0.0
+            self.time_usage_initial_reconstruct_time_step = 0.0
+            self.time_usage_topology_resolve_time_step = 0.0
+            self.time_usage_topology_reconstruct_time_step = 0.0
+            self.time_usage_topology_reconstruct_time_step_deactivate = 0.0
+            self.time_usage_topology_reconstruct_time_step_find_polygons = 0.0
+            self.time_usage_topology_reconstruct_time_step_stage_rotations = 0.0
+            self.time_usage_reconstruct_proximity = 0.0
+            self.time_usage_calculate_distances = 0.0
+            self.time_usage_obstacle_reconstruct_resolve = 0.0
+            self.time_usage_create_obstacle_grids = 0.0
+            self.time_usage_calculate_obstacle_distances = 0.0
+            self.time_usage_obstacle_create_obstacle_grid = 0.0
+            self.time_usage_obstacle_create_distance_grid = 0.0
+            self.time_usage_obstacle_calc_distances = 0.0
+            self.time_usage_reconstruct_time_step = 0.0
+    def end_proximity(self):
+        """Call at the end of proximity()."""
+        if self.enable_profiling:
+            self.time_usage_proximity += self.profile() - self.time_snapshot_start_proximity
+    
+    def start_read_input_data(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_read_input_data = self.profile()
+    def end_read_input_data(self):
+        if self.enable_profiling:
+            self.time_usage_read_input_data += self.profile() - self.time_snapshot_start_read_input_data
+    
+    def start_reconstruct_and_calculate_distances(self):
+        if self.enable_profiling:
+            self.time_snapshot_reconstruct_and_calculate_distances = self.profile()
+    def end_reconstruct_and_calculate_distances(self):
+        if self.enable_profiling:
+            self.time_usage_reconstruct_and_calculate_distances += self.profile() - self.time_snapshot_reconstruct_and_calculate_distances
+    
+    def start_initial_reconstruct_time_step(self):
+        if self.enable_profiling:
+            self.time_snapshot_initial_reconstruct_time_step = self.profile()
+    def end_initial_reconstruct_time_step(self):
+        if self.enable_profiling:
+            self.time_usage_initial_reconstruct_time_step += self.profile() - self.time_snapshot_initial_reconstruct_time_step
+    
+    def start_reconstruct_proximity(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_reconstruct_proximity = self.profile()
+    def end_reconstruct_proximity(self):
+        if self.enable_profiling:
+            self.time_usage_reconstruct_proximity += self.profile() - self.time_snapshot_start_reconstruct_proximity
+    
+    def start_calculate_distances(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_calculate_distances = self.profile()
+    def end_calculate_distances(self):
+        if self.enable_profiling:
+            self.time_usage_calculate_distances += self.profile() - self.time_snapshot_start_calculate_distances
+    
+    def start_obstacle_reconstruct_resolve(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_obstacle_reconstruct_resolve = self.profile()
+    def end_obstacle_reconstruct_resolve(self):
+        if self.enable_profiling:
+            self.time_usage_obstacle_reconstruct_resolve += self.profile() - self.time_snapshot_start_obstacle_reconstruct_resolve
+    
+    def start_create_obstacle_grids(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_create_obstacle_grids = self.profile()
+    def end_create_obstacle_grids(self):
+        if self.enable_profiling:
+            self.time_usage_create_obstacle_grids += self.profile() - self.time_snapshot_start_create_obstacle_grids
+    
+    def start_calculate_obstacle_distances(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_calculate_obstacle_distances = self.profile()
+    def end_calculate_obstacle_distances(self):
+        if self.enable_profiling:
+            self.time_usage_calculate_obstacle_distances += self.profile() - self.time_snapshot_start_calculate_obstacle_distances
+    
+    def start_reconstruct_time_step(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_reconstruct_time_step = self.profile()
+    def end_reconstruct_time_step(self):
+        if self.enable_profiling:
+            self.time_usage_reconstruct_time_step += self.profile() - self.time_snapshot_start_reconstruct_time_step
+    
+    def start_topology_resolve_time_step(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_topology_resolve_time_step = self.profile()
+    def end_topology_resolve_time_step(self):
+        if self.enable_profiling:
+            self.time_usage_topology_resolve_time_step += self.profile() - self.time_snapshot_start_topology_resolve_time_step
+    
+    def start_topology_reconstruct_time_step(self):
+        """Call at the start of topology_reconstruct_time_step()."""
+        if self.enable_profiling:
+            self.time_snapshot_start_topology_reconstruct_time_step = self.profile()
+    def end_topology_reconstruct_time_step(self):
+        """Call at the end of topology_reconstruct_time_step()."""
+        if self.enable_profiling:
+            self.time_usage_topology_reconstruct_time_step += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step
+    
+    def start_topology_reconstruct_time_step_deactivate(self):
+        if self.enable_profiling:
+            self.time_usage_start_topology_reconstruct_time_step_deactivate = self.profile()
+    def end_topology_reconstruct_time_step_deactivate(self):
+        if self.enable_profiling:
+            self.time_usage_topology_reconstruct_time_step_deactivate += self.profile() - self.time_usage_start_topology_reconstruct_time_step_deactivate
+    
+    def start_topology_reconstruct_time_step_find_polygons(self):
+        if self.enable_profiling:
+            self.time_usage_start_topology_reconstruct_time_step_find_polygons = self.profile()
+    def end_topology_reconstruct_time_step_find_polygons(self):
+        if self.enable_profiling:
+            self.time_usage_topology_reconstruct_time_step_find_polygons += self.profile() - self.time_usage_start_topology_reconstruct_time_step_find_polygons
+    
+    def start_topology_reconstruct_time_step_stage_rotations(self):
+        if self.enable_profiling:
+            self.time_usage_start_topology_reconstruct_time_step_stage_rotations = self.profile()
+    def end_topology_reconstruct_time_step_stage_rotations(self):
+        if self.enable_profiling:
+            self.time_usage_topology_reconstruct_time_step_stage_rotations += self.profile() - self.time_usage_start_topology_reconstruct_time_step_stage_rotations
+    
+    def print_proximity_usage(self, age_grid_paleo_times):
+        """Call at the end of proximity() to print its CPU usage."""
+        if self.enable_profiling:
+            print( "proximity() CPU usage:")
+            print(f"  Age grid paleo times: {age_grid_paleo_times}")
+            print(f"    Proximity: {self.time_usage_proximity:.2f} seconds")
+            print(f"      Read input data: {self.time_usage_read_input_data:.2f} seconds")
+            print(f"      Reconstruct and calculate distances: {self.time_usage_reconstruct_and_calculate_distances:.2f} seconds")
+            print(f"        Initial reconstruct time step: {self.time_usage_initial_reconstruct_time_step:.2f} seconds")
+            print(f"        Reconstruct proximity: {self.time_usage_reconstruct_proximity:.2f} seconds")
+            print(f"        Calculate distances: {self.time_usage_calculate_distances:.2f} seconds")
+            print(f"          Obstacle reconstruct/resolve: {self.time_usage_obstacle_reconstruct_resolve:.2f} seconds")
+            print(f"          Obstacle create obstacle grids: {self.time_usage_create_obstacle_grids:.2f} seconds")
+            print(f"          Obstacle calculate distances: {self.time_usage_calculate_obstacle_distances:.2f} seconds")
+            print(f"        Reconstruct time steps: {self.time_usage_reconstruct_time_step:.2f} seconds")
+            print(f"          Resolve topologies: {self.time_usage_topology_resolve_time_step:.2f} seconds")
+            print(f"          Topology reconstruct time step: {self.time_usage_topology_reconstruct_time_step:.2f} seconds")
+            print(f"            Topology reconstruct time step (deactivate): {self.time_usage_topology_reconstruct_time_step_deactivate:.2f} seconds")
+            print(f"            Topology reconstruct time step (points in polygons): {self.time_usage_topology_reconstruct_time_step_find_polygons:.2f} seconds")
+            print(f"            Topology reconstruct time step (stage rotations): {self.time_usage_topology_reconstruct_time_step_stage_rotations:.2f} seconds")
+    
+    @staticmethod
+    def profile():
+        return time_profile.perf_counter()
+
+# Profile CPU usage (currently just the profile() function).
+ENABLE_CPU_PROFILING = False
+cpu_profile = CpuProfile(ENABLE_CPU_PROFILING)
 
 
 # Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
@@ -201,6 +364,9 @@ def topology_reconstruct_time_step(
     #
     # The following code is the *faster* version of the above point-in-polygon code.
     #
+
+    cpu_profile.start_topology_reconstruct_time_step()
+    cpu_profile.start_topology_reconstruct_time_step_deactivate()
     
     # Remove any points that don't exist at 'time + time_increment'.
     curr_existing_point_infos = []
@@ -216,16 +382,24 @@ def topology_reconstruct_time_step(
         curr_existing_recon_points.append(curr_existing_recon_point)
         
         curr_existing_point_infos.append(curr_point_info)
+
+    cpu_profile.end_topology_reconstruct_time_step_deactivate()
     
     # Return empty list if 'time + time_increment' is older than oldest time of appearance of all points.
     if not curr_existing_point_infos:
+        cpu_profile.end_topology_reconstruct_time_step()
         return []
+
+    cpu_profile.start_topology_reconstruct_time_step_find_polygons()
         
     # Find the polygon plates containing the points.
     resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
             for resolved_plate_boundary in resolved_plate_boundaries]
     resolved_plate_boundaries_containing_points = points_in_polygons.find_polygons(
             curr_existing_recon_points, resolved_plate_polygons, resolved_plate_boundaries)
+
+    cpu_profile.end_topology_reconstruct_time_step_find_polygons()
+    cpu_profile.start_topology_reconstruct_time_step_stage_rotations()
 
     next_point_infos = []
 
@@ -243,6 +417,9 @@ def topology_reconstruct_time_step(
         next_recon_point = stage_rotation * curr_recon_point
         
         next_point_infos.append((curr_paleo_lon_lat_point, point_begin_time, next_recon_point))
+
+    cpu_profile.end_topology_reconstruct_time_step_stage_rotations()
+    cpu_profile.end_topology_reconstruct_time_step()
     
     return next_point_infos
 
@@ -452,7 +629,8 @@ def proximity(
     if time_increment <= 0:
         raise ValueError('The time increment "{}" is not positive and non-zero.'.format(time_increment))
     
-    if any(age_grid_paleo_time < 0 for _, age_grid_paleo_time in age_grid_filenames_and_paleo_times):
+    age_grid_paleo_times = [age_grid_paleo_time for _, age_grid_paleo_time in age_grid_filenames_and_paleo_times]
+    if any(age_grid_paleo_time < 0 for age_grid_paleo_time in age_grid_paleo_times):
         raise ValueError('Age grid paleo time must not be negative.')
     
     if (not output_distance_with_time and
@@ -460,7 +638,8 @@ def proximity(
         not output_standard_deviation_distance):
         raise ValueError('No output specified for ocean basin proximity.')
     
-    #tprof_0 = time_prof.perf_counter()
+    cpu_profile.start_proximity()
+    cpu_profile.start_read_input_data()
     
     rotation_model = pygplates.RotationModel(rotation_filenames, default_anchor_plate_id=anchor_plate_id)
     
@@ -490,6 +669,9 @@ def proximity(
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
         obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
+    
+    cpu_profile.end_read_input_data()
+    cpu_profile.start_reconstruct_and_calculate_distances()
 
     # Class to manage reconstruction data for ocean basin points associated with a specific age grid / paleo time.
     class OceanBasinReconstruction(object):
@@ -505,20 +687,6 @@ def proximity(
     # All proximity data to return to caller.
     # This is a dict mapping age grid paleo time to ProximityData.
     proximity_datas = {}
-    
-    #tprof_init = time_prof.perf_counter()
-    
-    #tprof_initial_reconstruct_time_step = 0.0
-    #tprof_topology_resolve_time_step = 0.0
-    #tprof_topology_reconstruct_time_step = 0.0
-    #tprof_reconstruct_proximity = 0.0
-    #tprof_calc_distances = 0.0
-    #tprof_obstacle_reconstruct = 0.0
-    #tprof_obstacle_resolve = 0.0
-    #tprof_obstacle_create_obstacle_grid = 0.0
-    #tprof_obstacle_create_distance_grid = 0.0
-    #tprof_obstacle_calc_distances = 0.0
-    #tprof_reconstruct_time_step = 0.0
 
     # List of age grids, sorted by increasing paleo time, that we've not yet started processing/reconstructing.
     unprocessed_age_grid_filenames_and_paleo_times = sorted(age_grid_filenames_and_paleo_times, key=lambda grid_and_time: grid_and_time[1])
@@ -534,8 +702,8 @@ def proximity(
         if (max_topological_reconstruction_time is not None and
             time > max_topological_reconstruction_time):
             break
-    
-        #tprof_initial_reconstruct_time_step_start = time_prof.perf_counter()
+
+        cpu_profile.start_initial_reconstruct_time_step()
         
         # Add any age grids with a paleo-time younger (smaller) than the current time.
         # We'll need to start reconstructing them back through time (as ocean basin reconstructions).
@@ -580,10 +748,9 @@ def proximity(
         if (not unprocessed_age_grid_filenames_and_paleo_times and
             not ocean_basin_reconstructions):
             break
-     
-        #tprof_initial_reconstruct_time_step += time_prof.perf_counter() - tprof_initial_reconstruct_time_step_start
-   
-        #tprof_reconstruct_proximity_start = time_prof.perf_counter()
+        
+        cpu_profile.end_initial_reconstruct_time_step()
+        cpu_profile.start_reconstruct_proximity()
         
         if proximity_features_are_topological:
             # Resolve our topological plate polygons (and deforming networks) to the current 'time'.
@@ -615,22 +782,18 @@ def proximity(
             proximity_reconstructed_geometries = []
             for proximity_reconstructed_feature_geometry in proximity_reconstructed_feature_geometries:
                 proximity_reconstructed_geometries.append(proximity_reconstructed_feature_geometry.get_reconstructed_geometry())
-    
-        #tprof_reconstruct_proximity += time_prof.perf_counter() - tprof_reconstruct_proximity_start
-    
-        #tprof_calc_distances_start = time_prof.perf_counter()
+
+        cpu_profile.end_reconstruct_proximity()
+        cpu_profile.start_calculate_distances()
         
         if continent_obstacle_filenames:
 
-            #tprof_i = time_prof.perf_counter()
+            cpu_profile.start_obstacle_reconstruct_resolve()
 
             obstacle_reconstructed_feature_geometries = []
             pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time)
             obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
                     for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
-        
-            #tprof_ii = time_prof.perf_counter()
-            #tprof_obstacle_reconstruct += tprof_ii - tprof_i
 
             topology_obstacle_feature_types = [pygplates.FeatureType.gpml_mid_ocean_ridge, pygplates.FeatureType.gpml_subduction_zone]
             #topology_obstacle_feature_types = None
@@ -647,21 +810,18 @@ def proximity(
                 for topology_obstacle_shared_sub_segment in topology_obstacle_shared_boundary_section.get_shared_sub_segments():
                     obstacle_reconstructed_geometries.append(topology_obstacle_shared_sub_segment.get_resolved_geometry())
         
-            #tprof_iii = time_prof.perf_counter()
-            #tprof_obstacle_resolve += tprof_iii - tprof_ii
+            cpu_profile.end_obstacle_reconstruct_resolve()
+            cpu_profile.start_create_obstacle_grids()
             
             # Create obstacle grid.
             shortest_path_obstacle_grid = shortest_path_grid.create_obstacle_grid(obstacle_reconstructed_geometries)
-        
-            #tprof_iv = time_prof.perf_counter()
-            #tprof_obstacle_create_obstacle_grid += tprof_iv - tprof_iii
 
             # Create distance grid.
             shortest_path_distance_grid = shortest_path_obstacle_grid.create_distance_grid(
                     proximity_reconstructed_geometries, proximity_distance_threshold_radians)
-        
-            #tprof_v = time_prof.perf_counter()
-            #tprof_obstacle_create_distance_grid += tprof_v - tprof_iv
+
+            cpu_profile.end_create_obstacle_grids()
+            cpu_profile.start_calculate_obstacle_distances()
             
             # Query distances to ocean points.
             # Find the shortest path distance to each the ocean basin point in each age grid currently being reconstructed (to all proximity reconstructed geometries).
@@ -682,8 +842,7 @@ def proximity(
                     ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
                     proximity_data.add_proximity(distance_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
         
-            #tprof_vi = time_prof.perf_counter()
-            #tprof_obstacle_calc_distances += tprof_vi - tprof_v
+            cpu_profile.end_calculate_obstacle_distances()
             
         else:
             # Find the minimum distance to each the ocean basin point in each age grid currently being reconstructed (to all proximity reconstructed geometries).
@@ -711,15 +870,14 @@ def proximity(
                     ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
                     proximity_data.add_proximity(distance_in_kms, time, ocean_basin_lon, ocean_basin_lat, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
     
-        #tprof_calc_distances += time_prof.perf_counter() - tprof_calc_distances_start
-    
-        #tprof_reconstruct_time_step_start = time_prof.perf_counter()
+        cpu_profile.end_calculate_distances()
+        cpu_profile.start_reconstruct_time_step()
         
         # Reconstruct to the next time unless we're already at the last time.
         if (max_topological_reconstruction_time is None or
             time <= max_topological_reconstruction_time):
 
-            #tprof_a_0 = time_prof.perf_counter()
+            cpu_profile.start_topology_resolve_time_step()
             
             # Resolve our topological plate polygons.
             resolved_plate_boundaries = []
@@ -730,8 +888,7 @@ def proximity(
                     time,
                     resolve_topology_types=pygplates.ResolveTopologyType.boundary)
     
-            #tprof_a_1 = time_prof.perf_counter()
-            #tprof_topology_resolve_time_step += tprof_a_1 - tprof_a_0
+            cpu_profile.end_topology_resolve_time_step()
             
             # Find the ocean basin points for the next time step.
             # We do this for each age grid currently being reconstructed.
@@ -749,40 +906,14 @@ def proximity(
                 if not ocean_basin_reconstruction.current_point_infos:
                     del ocean_basin_reconstructions[age_grid_paleo_time]
     
-            #tprof_a_2 = time_prof.perf_counter()
-            #tprof_topology_reconstruct_time_step += tprof_a_2 - tprof_a_1
-    
-        #tprof_reconstruct_time_step += time_prof.perf_counter() - tprof_reconstruct_time_step_start
+        cpu_profile.end_reconstruct_time_step()
         
         # Increment the time (to the next time interval).
         time_index += 1
-    
-    #tprof_reconstruct_and_calc_distances = time_prof.perf_counter()
 
-    #print(f"Read input data: {tprof_init - tprof_0:.2f} seconds")
-    #print(f"Reconstruct and calculate distances: {tprof_reconstruct_and_calc_distances - tprof_init:.2f} seconds")
-    #if tprof_initial_reconstruct_time_step:
-    #    print(f"  Initial reconstruct time step: {tprof_initial_reconstruct_time_step:.2f} seconds")
-    #if tprof_reconstruct_proximity:
-    #    print(f"  Reconstruct proximity: {tprof_reconstruct_proximity:.2f} seconds")
-    #if tprof_calc_distances:
-    #    print(f"  Calculate distances: {tprof_calc_distances:.2f} seconds")
-    #if tprof_obstacle_reconstruct:
-    #    print(f"    Obstacle reconstruct: {tprof_obstacle_reconstruct:.2f} seconds")
-    #if tprof_obstacle_resolve:
-    #    print(f"    Obstacle resolve: {tprof_obstacle_resolve:.2f} seconds")
-    #if tprof_obstacle_create_obstacle_grid:
-    #    print(f"    Obstacle create obstacle grid: {tprof_obstacle_create_obstacle_grid:.2f} seconds")
-    #if tprof_obstacle_create_distance_grid:
-    #    print(f"    Obstacle create distance grid: {tprof_obstacle_create_distance_grid:.2f} seconds")
-    #if tprof_obstacle_calc_distances:
-    #    print(f"    Obstacle calculate distances: {tprof_obstacle_calc_distances:.2f} seconds")
-    #if tprof_reconstruct_time_step:
-    #    print(f"  Reconstruct time steps: {tprof_reconstruct_time_step:.2f} seconds")
-    #if tprof_topology_resolve_time_step:
-    #    print(f"    Resolve topologies: {tprof_topology_resolve_time_step:.2f} seconds")
-    #if tprof_topology_reconstruct_time_step:
-    #    print(f"    Topology reconstruct time step: {tprof_topology_reconstruct_time_step:.2f} seconds")
+    cpu_profile.end_reconstruct_and_calculate_distances()
+    cpu_profile.end_proximity()
+    cpu_profile.print_proximity_usage(age_grid_paleo_times)
     
     return proximity_datas
 
