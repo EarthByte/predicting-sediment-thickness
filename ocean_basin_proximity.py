@@ -32,8 +32,12 @@ import ptt.utils.proximity_query as proximity_query
 import pygplates
 import shortest_path
 import sys
-
 import time as time_profile
+
+
+# Enable CPU/memory profiling.
+ENABLE_CPU_PROFILING = False
+ENABLE_MEMORY_PROFILING = False
 
 
 # Class to profile CPU usage.
@@ -196,8 +200,78 @@ class CpuProfile(object):
         return time_profile.perf_counter_ns()  # in nanoseconds
 
 # Profile CPU usage (currently just the profile() function).
-ENABLE_CPU_PROFILING = False
 cpu_profile = CpuProfile(ENABLE_CPU_PROFILING)
+
+
+from itertools import chain
+from collections import deque
+try:
+    from reprlib import repr
+except ImportError:
+    pass
+
+# Class to profile memory usage.
+class MemoryProfile(object):
+    def __init__(self, enable_profiling=False):
+        self.enable_profiling = enable_profiling
+    
+    def print_object_memory_usage(self, obj, obj_name, decimal_places=2):
+        """Print the total memory usage of an object (in MB)."""
+        if self.enable_profiling:
+            obj_memory_usage = self.total_memory_size(obj) / 1e6  # in MB
+            print('Memory usage "{}": {:.{}f}MB'.format(obj_name, obj_memory_usage, decimal_places))
+
+    # This function was obtained from https://code.activestate.com/recipes/577504/
+    @staticmethod
+    def total_memory_size(o, handlers={}, verbose=False):
+        """ Returns the approximate memory footprint an object and all of its contents.
+
+        Automatically finds the contents of the following builtin containers and
+        their subclasses:  tuple, list, deque, dict, set and frozenset.
+        To search other containers, add handlers to iterate over their contents:
+
+            handlers = {SomeContainerClass: iter,
+                        OtherContainerClass: OtherContainerClass.get_elements}
+
+        """
+        dict_handler = lambda d: chain.from_iterable(d.items())
+        all_handlers = {tuple: iter,
+                        list: iter,
+                        deque: iter,
+                        dict: dict_handler,
+                        set: iter,
+                        frozenset: iter,
+                    }
+        all_handlers.update(handlers)     # user handlers take precedence
+        seen = set()                      # track which object id's have already been seen
+        default_size = sys.getsizeof(0)       # estimate sizeof object without __sizeof__
+
+        def sizeof(o):
+            if id(o) in seen:       # do not double count the same object
+                return 0
+            seen.add(id(o))
+            s = sys.getsizeof(o, default_size)
+
+            if verbose:
+                print(s, type(o), repr(o), file=sys.stderr)
+
+            for typ, handler in all_handlers.items():
+                if isinstance(o, typ):
+                    s += sum(map(sizeof, handler(o)))
+                    break
+            else:
+                if not hasattr(o.__class__, '__slots__'):
+                    if hasattr(o, '__dict__'):
+                        s+=sizeof(o.__dict__) # no __slots__ *usually* means a __dict__, but some special builtin classes (such as `type(None)`) have neither
+                    # else, `o` has no attributes at all, so sys.getsizeof() actually returned the correct value
+                else:
+                    s+=sum(sizeof(getattr(o, x)) for x in o.__class__.__slots__ if hasattr(o, x))
+            return s
+
+        return sizeof(o)
+
+# Profile memory usage (currently just the profile() function).
+memory_profile = MemoryProfile(ENABLE_MEMORY_PROFILING)
 
 
 # Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
@@ -669,6 +743,7 @@ def proximity(
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
         obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
+        #memory_profile.print_object_memory_usage(shortest_path_grid, 'shortest_path_grid')
     
     cpu_profile.end_read_input_data()
     cpu_profile.start_reconstruct_and_calculate_distances()
@@ -766,6 +841,7 @@ def proximity(
                     proximity_datas[age_grid_paleo_time] = ProximityData(ocean_basin_reconstruction.point_lon_lats,
                                                                          output_mean_distance, output_standard_deviation_distance, output_distance_with_time)
                     #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
+                    memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
         
         cpu_profile.end_read_age_grid()
         
@@ -872,7 +948,9 @@ def proximity(
                     proximity_data.add_proximity(distance_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
         
             # Remove references - might help Python to deallocate these objects now.
+            #memory_profile.print_object_memory_usage(shortest_path_distance_grid, 'shortest_path_distance_grid')
             del shortest_path_distance_grid
+            #memory_profile.print_object_memory_usage(shortest_path_obstacle_grid, 'shortest_path_obstacle_grid')
             del shortest_path_obstacle_grid
             del obstacle_reconstructed_feature_geometries
             del obstacle_reconstructed_geometries
@@ -962,6 +1040,10 @@ def proximity(
     cpu_profile.end_proximity()
     cpu_profile.print_proximity_usage(age_grid_paleo_times)
     
+    #memory_profile.print_object_memory_usage(proximity_datas, 'proximity_datas')
+    for proximity_data_time in proximity_datas.keys():
+        memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}]'.format(proximity_data_time))
+
     return proximity_datas
 
 
@@ -1382,6 +1464,10 @@ if __name__ == '__main__':
                     args.output_mean_distance,
                     args.output_std_dev_distance,
                     (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
+
+            # Calling 'write_proximity_data()' causes 'proximity_data' to use more memory.
+            # So free 'proximity_data' before moving onto next one in order to limit this expanding memory usage.
+            del proximity_datas[age_grid_paleo_time]
         
         sys.exit(0)
     
