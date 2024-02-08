@@ -216,8 +216,11 @@ def generate_distance_grid(times):
             os.remove(dst_mean_distance_grid)
         
         # Clamp mean distances.
-        call_system_command(["gmt", "grdmath", "-fg", str(proximity_threshold_kms), src_mean_distance_grid, "MIN", "=", dst_mean_distance_grid])
-        os.remove(src_mean_distance_grid)
+        #
+        # Check that the source mean distance grid exists (it might not if all ocean basin points were outside the age grid).
+        if os.access(src_mean_distance_grid, os.R_OK):
+            call_system_command(["gmt", "grdmath", "-fg", str(proximity_threshold_kms), src_mean_distance_grid, "MIN", "=", dst_mean_distance_grid])
+            os.remove(src_mean_distance_grid)
 
 
 # Wraps around 'generate_distance_grid()' so can be used by multiprocessing.Pool.map()
