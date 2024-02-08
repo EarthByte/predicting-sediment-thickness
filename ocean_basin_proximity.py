@@ -334,7 +334,7 @@ def topology_reconstruct_time_step(
         time_increment,
         resolved_plate_boundaries,
         resolved_plate_polygons,
-        stage_rotation_cache):
+        rotation_model):
     #
     # The following code comment is the *slower* version of point-in-polygon testing.
     #
@@ -355,7 +355,7 @@ def topology_reconstruct_time_step(
     #            continue
     #        
     #        # Get the stage rotation from 'time' to 'time + time_increment'.
-    #        stage_rotation = stage_rotation_cache.get_stage_rotation(plate_id, time, time_increment)
+    #        stage_rotation = rotation_model.get_rotation(time + time_increment, plate_id, time)
     #        next_recon_point = stage_rotation * curr_recon_point
     #        
     #        next_point_infos.append((point_feature, point_begin_time, next_recon_point))
@@ -406,16 +406,24 @@ def topology_reconstruct_time_step(
         cpu_profile.end_topology_reconstruct_time_step_find_polygons()
         cpu_profile.start_topology_reconstruct_time_step_stage_rotations()
 
+        # Cache the stage rotation associated with each resolved plate boundary.
+        stage_rotation_cache = {}
+
         # Iterate over the point-in-polygon results.
         for reconstructed_point_index, resolved_plate_boundary in enumerate(resolved_plate_boundaries_containing_points):
             # If point is not within any resolved plate boundaries then don't move it.
             if resolved_plate_boundary is None:
                 continue
             
-            plate_id = resolved_plate_boundary.get_feature().get_reconstruction_plate_id()
-            
             # Get the stage rotation from 'time' to 'time + time_increment'.
-            stage_rotation = stage_rotation_cache.get_stage_rotation(plate_id, time, time_increment)
+            if resolved_plate_boundary in stage_rotation_cache:
+                stage_rotation = stage_rotation_cache[resolved_plate_boundary]
+            else:
+                # Only call these functions for a new resolved plate boundary (to reduce computations).
+                plate_id = resolved_plate_boundary.get_feature().get_reconstruction_plate_id()
+                stage_rotation = rotation_model.get_rotation(time + time_increment, plate_id, time)
+                # Cache stage rotation.
+                stage_rotation_cache[resolved_plate_boundary] = stage_rotation
             
             # Update the current reconstructed point position.
             current_reconstructed_points[reconstructed_point_index] = stage_rotation * current_reconstructed_points[reconstructed_point_index]
@@ -477,22 +485,6 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 "-G{}".format(grd_filename)]
     
     call_system_command(gmt_command_line)
-
-
-# Class to calculate and re-use stage rotation calculations.
-class StageRotationCache(object):
-    def __init__(self, rotation_model):
-        self.rotation_model = rotation_model
-        self.stage_rotation_dict = {}
-    
-    def get_stage_rotation(self, plate_id, time, time_increment):
-        stage_rotation = self.stage_rotation_dict.get((plate_id, time, time_increment))
-        if not stage_rotation:
-            stage_rotation = self.rotation_model.get_rotation(time + time_increment, plate_id, time)
-            # Cache for next time.
-            self.stage_rotation_dict[(plate_id, time, time_increment)] = stage_rotation
-        
-        return stage_rotation
 
 
 # Class to hold all proximity data for a specific age grid paleo time.
@@ -672,8 +664,6 @@ def proximity(
     
     topology_reconstruction_features = pygplates.FeaturesFunctionArgument(topological_reconstruction_filenames).get_features()
     
-    stage_rotation_cache = StageRotationCache(rotation_model)
-    
     if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)
@@ -764,7 +754,7 @@ def proximity(
                             time - age_grid_paleo_time,  # time increment
                             resolved_plate_boundaries,
                             resolved_plate_polygons,
-                            stage_rotation_cache)
+                            rotation_model)
                     del resolved_plate_boundaries  # free memory
                     #print('Reconstructed initial age grid {} to time {}'.format(age_grid_paleo_time, time))
                 
@@ -953,7 +943,7 @@ def proximity(
                         time_increment,
                         resolved_plate_boundaries,
                         resolved_plate_polygons,
-                        stage_rotation_cache)
+                        rotation_model)
                 # If finished reconstructing ocean basin (for associated age grid) then remove from current reconstructions.
                 if not ocean_basin_reconstruction.is_active():
                     #print('Finished age grid {} at time {}'.    format(age_grid_paleo_time, time))
