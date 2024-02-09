@@ -985,9 +985,9 @@ def proximity(
                     ocean_basin_reconstructed_point = ocean_basin_reconstruction.current_reconstructed_points[ocean_basin_reconstructed_point_index]
                     ocean_basin_reconstructed_lat, ocean_basin_reconstructed_lon = ocean_basin_reconstructed_point.to_lat_lon()
                     proximity_data.add_proximity(distance_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat)
-                
                 del proximity_geometries_closest_to_ocean_basin_points  # free memory
-                del proximity_reconstructed_geometries  # free memory
+            
+            del proximity_reconstructed_geometries  # free memory
     
         cpu_profile.end_calculate_distances()
         cpu_profile.start_reconstruct_time_step()
