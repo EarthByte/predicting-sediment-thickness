@@ -528,8 +528,8 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 "gmt",
                 "nearneighbor",
                 xyz_filename,
-                "-N4/1", # Divide search radius into 4 sectors but only require a value in 1 sector.
-                "-S{}d".format(0.7 * grid_spacing),
+                "-N4+m2", # Divide search radius into 4 sectors but only require values in 2 sectors.
+                "-S{}d".format(1.5 * grid_spacing), # Search radius is a larger multiple the grid spacing.
                 "-I{}".format(grid_spacing),
                 # Use GMT gridline registration since our input point grid has data points on the grid lines.
                 # Gridline registration is the default so we don't need to force pixel registration...
