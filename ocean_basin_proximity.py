@@ -27,6 +27,7 @@ import argparse
 from ptt.utils.call_system_command import call_system_command
 import math
 import multiprocessing
+import numpy as np
 import ptt.utils.points_in_polygons as points_in_polygons
 import ptt.utils.proximity_query as proximity_query
 import pygplates
@@ -463,7 +464,7 @@ def topology_reconstruct_time_step(
         next_point_indices.append(point_index)
 
     current_reconstructed_points = next_reconstructed_points
-    current_point_indices = next_point_indices
+    current_point_indices = np.array(next_point_indices, dtype=int)  # numpy array uses less memory
 
     cpu_profile.end_topology_reconstruct_time_step_deactivate()
     
@@ -565,8 +566,9 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
 # Class to hold all proximity data for a specific age grid paleo time.
 class ProximityData(object):
 
-    def __init__(self, point_lon_lats, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time):
-        self.point_lon_lats = point_lon_lats
+    def __init__(self, point_lons, point_lats, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time):
+        self.point_lons = point_lons
+        self.point_lats = point_lats
 
         self.output_mean_proximity = output_mean_proximity
         self.output_standard_deviation_proximity = output_standard_deviation_proximity
@@ -576,14 +578,11 @@ class ProximityData(object):
         if self.output_mean_proximity or self.output_standard_deviation_proximity:
             # Statistics to calculate mean/std-dev for a single ocean basin point.
             # Each ocean basin point has (num_proximities, sum_proximities, sum_square_proximities) that start at zero.
-            self.point_statistics = [(0, 0.0, 0.0)] * len(self.point_lon_lats)
-            self.mean_data = []
-            self.std_dev_data = []
-            self.need_to_update_mean_data = False
-            self.need_to_update_std_dev_data = False
+            self.point_statistics = np.full((len(self.point_lons), 3), (0, 0.0, 0.0), dtype=float)  # numpy array uses less memory
+        
         # Keep a record of all proximity over time.
         if self.output_proximity_with_time:
-            self.time_data = {}
+            self.time_datas = {}  # dict indexed by time
     
     def add_proximity(self, proximity_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat):
         # Update the proximity statistics for the current ocean basin point.
@@ -593,41 +592,44 @@ class ProximityData(object):
             sum_proximities += proximity_in_kms
             sum_square_proximities += proximity_in_kms * proximity_in_kms
             self.point_statistics[ocean_basin_point_index] = (num_proximities, sum_proximities, sum_square_proximities)
-            # Mean and std-dev will need to be recalculated.
-            self.need_to_update_mean_data = True
-            self.need_to_update_std_dev_data = True
         
         # Add proximity for the current reconstructed point to a list for the reconstruction time.
         if self.output_proximity_with_time:
-            self.time_data.setdefault(time, []).append((ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat, proximity_in_kms))
+            # If we haven't already, create a new array of (reconstructed_lon, reconstructed_lat, proximity_in_kms) for all points at the specified time.
+            if time not in self.time_datas:
+                self.time_datas[time] = np.full((len(self.point_lons), 3), (0.0, 0.0, 0.0), dtype=float)  # numpy array uses less memory
+            # Store the data for the current ocean point.
+            self.time_datas[time][ocean_basin_point_index] = (ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat, proximity_in_kms)
     
-    # Return dict of all time data.
-    # Dict is a mapping of time to a list of (lon, lat, proximity) tuples.
-    def get_all_time_data(self):
+    # Return the list of times (added with 'add_proximity()').
+    def get_times(self):
+        return list(self.time_datas.keys())
+    
+    # Return array of proximity tuples for the specified time.
+    # Actually each tuple is an array of length 3 containing (reconstructed_lon, reconstructed_lat, proximity_in_kms).
+    def get_time_data(self, time):
         if self.output_proximity_with_time:
-            return self.time_data
+            return self.time_datas[time]  # raises KeyError if time not in dict
         else:
-            return {}
+            return []
     
     # Return list of mean statistics (over time) tuples.
     # Each tuple is (lon, lat, mean).
     def get_mean_data(self):
         if self.output_mean_proximity:
-            if self.need_to_update_mean_data:
-                # Calculate a mean proximity over time for each ocean basin point.
-                mean_data = []
-                for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
-                    # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
-                    if num_proximities > 0:
-                        mean_proximity = sum_proximities / num_proximities
+            # Calculate a mean proximity over time for each ocean basin point.
+            mean_data = []
+            for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
+                # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
+                if num_proximities > 0:
+                    mean_proximity = sum_proximities / num_proximities
 
-                        ocean_basin_lon, ocean_basin_lat = self.point_lon_lats[point_index]
+                    ocean_basin_lon = self.point_lons[point_index]
+                    ocean_basin_lat = self.point_lats[point_index]
+
                     mean_data.append((ocean_basin_lon, ocean_basin_lat, mean_proximity))
-                
-                self.mean_data = mean_data
-                self.need_to_update_mean_data = False
 
-            return self.mean_data
+            return mean_data
         else:
             return []
     
@@ -635,28 +637,26 @@ class ProximityData(object):
     # Each tuple is (lon, lat, std_dev).
     def get_std_dev_data(self):
         if self.output_standard_deviation_proximity:
-            if self.need_to_update_std_dev_data:
-                # Calculate a standard deviation proximity over time for each ocean basin point.
-                std_dev_data = []
-                for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
-                    # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
-                    if num_proximities > 0:
-                        mean_proximity = sum_proximities / num_proximities
-                    
-                        standard_deviation_proximity_squared = (sum_square_proximities / num_proximities) - (mean_proximity * mean_proximity)
+            # Calculate a standard deviation proximity over time for each ocean basin point.
+            std_dev_data = []
+            for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
+                # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
+                if num_proximities > 0:
+                    mean_proximity = sum_proximities / num_proximities
+                
+                    standard_deviation_proximity_squared = (sum_square_proximities / num_proximities) - (mean_proximity * mean_proximity)
                     # Ensure not negative due to numerical precision.
                     if standard_deviation_proximity_squared > 0:
                         standard_deviation_proximity = math.sqrt(standard_deviation_proximity_squared)
                     else:
                         standard_deviation_proximity = 0
                         
-                        ocean_basin_lon, ocean_basin_lat = self.point_lon_lats[point_index]
+                        ocean_basin_lon = self.point_lons[point_index]
+                        ocean_basin_lat = self.point_lats[point_index]
+                    
                     std_dev_data.append((ocean_basin_lon, ocean_basin_lat, standard_deviation_proximity))
-                
-                self.std_dev_data = std_dev_data
-                self.need_to_update_std_dev_data = False
 
-            return self.std_dev_data
+            return std_dev_data
         else:
             return []
 
@@ -752,22 +752,29 @@ def proximity(
     class OceanBasinReconstruction(object):
         def __init__(self, lon_lat_age_list, age_grid_paleo_time):
             self.age_grid_paleo_time = age_grid_paleo_time
-
             self.num_points = len(lon_lat_age_list)
 
             # For each ocean basin point add lon-lat-point, time-of-appearance and initial-reconstructed-point to 3 separate lists.
             # The initial reconstructed point will be updated as the ocean basin points are topologically reconstructed back into time.
             # When a point is deactivated its entry is removed from 'current_reconstructed_points' and 'current_point_indices'
             # such that their lengths will decrease (possibly to zero if all points have been deactivated).
-            self.point_lon_lats = []
-            self.point_ages = []
-            self.current_reconstructed_points = []
-            self.current_point_indices = []
+            point_lons = []
+            point_lats = []
+            point_ages = []
+            current_point_indices = []
+            current_reconstructed_points = []
             for point_index, (lon, lat, age) in enumerate(lon_lat_age_list):
-                self.point_lon_lats.append((lon, lat))
-                self.point_ages.append(age_grid_paleo_time + age)
-                self.current_reconstructed_points.append(pygplates.PointOnSphere(lat, lon))
-                self.current_point_indices.append(point_index)
+                point_lons.append(lon)
+                point_lats.append(lat)
+                point_ages.append(age_grid_paleo_time + age)
+                current_point_indices.append(point_index)
+                current_reconstructed_points.append(pygplates.PointOnSphere(lat, lon))
+            
+            self.point_lons = np.array(point_lons, dtype=float)  # numpy array uses less memory
+            self.point_lats = np.array(point_lats, dtype=float)  # numpy array uses less memory
+            self.point_ages = np.array(point_ages, dtype=float)  # numpy array uses less memory
+            self.current_point_indices = np.array(current_point_indices, dtype=int)  # numpy array uses less memory
+            self.current_reconstructed_points = current_reconstructed_points
         
         def is_active(self):
             # Return True if not all points have been deactivated.
@@ -809,6 +816,7 @@ def proximity(
             # otherwise there will be no reconstruction associated with the current age grid.
             if lon_lat_age_list:
                 ocean_basin_reconstruction = OceanBasinReconstruction(lon_lat_age_list, age_grid_paleo_time)
+                del lon_lat_age_list  # free memory
                 
                 # If the age grid paleo time does not coincide with a time step then reconstruct from the former to the latter.
                 # This can happen if the time interval is larger than 1 Myr.
@@ -838,7 +846,7 @@ def proximity(
                     # Add to the ocean basin reconstructions currently in progress.
                     ocean_basin_reconstructions[age_grid_paleo_time] = ocean_basin_reconstruction
                     # Also create a ProximityData object for the new ocean basin reconstruction.
-                    proximity_datas[age_grid_paleo_time] = ProximityData(ocean_basin_reconstruction.point_lon_lats,
+                    proximity_datas[age_grid_paleo_time] = ProximityData(ocean_basin_reconstruction.point_lons, ocean_basin_reconstruction.point_lats,
                                                                          output_mean_distance, output_standard_deviation_distance, output_distance_with_time)
                     #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
                     memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
@@ -1180,7 +1188,7 @@ def proximity_parallel(
     while pool_proximity_datas:
         pool_proximity_data = pool_proximity_datas.pop()
         proximity_datas.update(pool_proximity_data)  # dict update
-        del pool_proximity_data  # free memory
+        del pool_proximity_data  # free memory now that it's merged
     
     return proximity_datas
     
@@ -1196,12 +1204,12 @@ def write_proximity_data(
         output_grd_files = None):
     
     if output_distance_with_time:
-        for time, proximity_time_data in proximity_data.get_all_time_data().items():
+        for time in proximity_data.get_times():
             xyz_filename = '{}_{}_{:0.2f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
             if output_grd_files:
                 grd_filename = '{}_{}_{:0.2f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
             
-            write_xyz_file(xyz_filename, proximity_time_data)
+            write_xyz_file(xyz_filename, proximity_data.get_time_data(time))
             if output_grd_files:
                 grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
                 write_grd_file_from_xyz(
@@ -1237,6 +1245,9 @@ def write_proximity_data(
                     grid_spacing, num_grid_longitudes, num_grid_latitudes,
                     # Using original (grid-aligned) points so don't near nearest neighbour filtering...
                     use_nearneighbor=False)
+    
+    # See how much extra memory is used after time/mean/std-dev data is extracted from the ProximityData.
+    #memory_profile.print_object_memory_usage(proximity_data, 'proximity_datas[{}] at end of write_proximity_data()'.format(age_grid_paleo_time))
 
 
 if __name__ == '__main__':
@@ -1464,10 +1475,6 @@ if __name__ == '__main__':
                     args.output_mean_distance,
                     args.output_std_dev_distance,
                     (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
-
-            # Calling 'write_proximity_data()' causes 'proximity_data' to use more memory.
-            # So free 'proximity_data' before moving onto next one in order to limit this expanding memory usage.
-            del proximity_datas[age_grid_paleo_time]
         
         sys.exit(0)
     
