@@ -1119,28 +1119,18 @@ def proximity_parallel(
     # which needs to be repeated for each task (group of times) - this is because each age grid involves
     # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
     # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
-    min_num_age_grids_per_call = 10
-    
-    # Divide the input times (age grid paleo times) into sub-lists (each to be run on a separate process).
-    #
-    # We could reduce the number of tasks to the number of CPUs (ie, increase number of times per task).
-    # However some tasks might finish sooner than others leaving some CPUs under utilised. Conversely, we don't
-    # want the number of tasks to be too high otherwise the calculation sharing (mentioned above) is reduced.
-    # So we double the number of tasks (twice number of CPUs) as a good compromise.
-    num_tasks = 2 * num_cpus
-    
-    # Create the pool sub-lists of times.
-    age_grid_filenames_and_paleo_times_sub_lists = []
+    num_age_grids_per_task = 16
+
+    # Create a list of time periods.
+    # Each task will be passed the times within a single time period.
+    task_age_grid_filenames_and_paleo_times_lists = []
     num_times = len(age_grid_filenames_and_paleo_times)
-    num_times_per_task = (num_times + num_tasks - 1) // num_tasks
-    if num_times_per_task < min_num_age_grids_per_call:
-        num_times_per_task = min_num_age_grids_per_call
     task_start_time_index = 0
     while task_start_time_index < num_times:
-        # Pass consecutive times into each process since the distance calculations are more efficient that way.
-        age_grid_filenames_and_paleo_times_sub_lists.append(
-                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_times_per_task])
-        task_start_time_index += num_times_per_task
+        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
+        task_age_grid_filenames_and_paleo_times_lists.append(
+                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
+        task_start_time_index += num_age_grids_per_task
     
     # Split the workload across the CPUs.
     try:
@@ -1155,7 +1145,7 @@ def proximity_parallel(
                         proximity_features_are_topological,
                         proximity_feature_types,
                         topological_reconstruction_filenames,
-                        age_grid_filenames_and_paleo_times_sub_list,
+                        task_age_grid_filenames_and_paleo_times_list,
                         time_increment,
                         output_distance_with_time,
                         output_mean_distance,
@@ -1164,7 +1154,7 @@ def proximity_parallel(
                         continent_obstacle_filenames,
                         anchor_plate_id,
                         proximity_distance_threshold_radians
-                    ) for age_grid_filenames_and_paleo_times_sub_list in age_grid_filenames_and_paleo_times_sub_lists
+                    ) for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists
                 ),
                 1) # chunksize
         

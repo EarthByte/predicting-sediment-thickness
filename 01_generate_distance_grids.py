@@ -273,7 +273,17 @@ if __name__ == '__main__':
     # which needs to be repeated for each task (group of times) - this is because each age grid involves
     # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
     # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
-    min_num_age_grids_per_call = 10
+    num_age_grids_per_task = 16
+
+    # Create a list of time periods.
+    # Each task will be passed the times within a single time period.
+    task_time_lists = []
+    num_times = len(times)
+    task_start_time_index = 0
+    while task_start_time_index < num_times:
+        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
+        task_time_lists.append(times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
+        task_start_time_index += num_age_grids_per_task
 
     if use_all_cpus:
     
@@ -289,26 +299,6 @@ if __name__ == '__main__':
         else:
             raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
         
-        # Divide the input times (age grid paleo times) into sub-lists (each to be run on a separate process).
-        #
-        # We could reduce the number of tasks to the number of CPUs (ie, increase number of times per task).
-        # However some tasks might finish sooner than others leaving some CPUs under utilised. Conversely, we don't
-        # want the number of tasks to be too high otherwise the calculation sharing (mentioned above) is reduced.
-        # So we double the number of tasks (twice number of CPUs) as a good compromise.
-        num_tasks = 2 * num_cpus
-        
-        # Create the pool sub-lists of times.
-        times_sub_lists = []
-        num_times = len(times)
-        num_times_per_task = (num_times + num_tasks - 1) // num_tasks
-        if num_times_per_task < min_num_age_grids_per_call:
-            num_times_per_task = min_num_age_grids_per_call
-        task_start_time_index = 0
-        while task_start_time_index < num_times:
-            # Pass consecutive times into each process since the distance calculations are more efficient that way.
-            times_sub_lists.append(times[task_start_time_index : task_start_time_index + num_times_per_task])
-            task_start_time_index += num_times_per_task
-        
         try:
             # Split the workload across the CPUs.
             pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
@@ -316,8 +306,8 @@ if __name__ == '__main__':
                     generate_distance_grid_parallel_pool_function,
                     (
                         (
-                            times_sub_list,
-                        ) for times_sub_list in times_sub_lists
+                            task_time_list,
+                        ) for task_time_list in task_time_lists
                     ),
                     1) # chunksize
             
@@ -333,12 +323,8 @@ if __name__ == '__main__':
             pool.join()
 
     else:
-        num_times = len(times)
-        start_time_index = 0
-        while start_time_index < num_times:
-            # Pass 'min_num_age_grids_per_call' consecutive times into each process since the distance calculations are more efficient that way.
-            generate_distance_grid(times[start_time_index : start_time_index + min_num_age_grids_per_call])
-            start_time_index += min_num_age_grids_per_call
+        for task_time_list in task_time_lists:
+            generate_distance_grid(task_time_list)
     
     #tprof_end = time_prof.perf_counter()
     #print(f"Total time: {tprof_end - tprof_start:.2f} seconds")
