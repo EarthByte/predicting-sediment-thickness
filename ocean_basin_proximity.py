@@ -1070,169 +1070,6 @@ def proximity(
         memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}]'.format(proximity_data_time))
 
     return proximity_datas
-
-
-# Wraps around 'proximity()' so can be used by multiprocessing.Pool.map() which
-# requires a single-argument function.
-def proximity_parallel_pool_function(args):
-    try:
-        return proximity(*args)
-    except KeyboardInterrupt:
-        pass
-
-
-def low_priority():
-    """ Set the priority of the process to below-normal."""
-
-    import sys
-    try:
-        sys.getwindowsversion()
-    except AttributeError:
-        isWindows = False
-    else:
-        isWindows = True
-
-    if isWindows:
-        try:
-            import psutil
-        except ImportError:
-            pass
-        else:
-            p = psutil.Process()
-            p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
-    else:
-        import os
-
-        os.nice(1)
-
-
-def proximity_parallel(
-        input_points, # List of (lon, lat) tuples.
-        rotation_filenames,
-        proximity_filenames,
-        proximity_features_are_topological,
-        proximity_feature_types,
-        topological_reconstruction_filenames,
-        age_grid_filenames_and_paleo_times,
-        time_increment,
-        output_distance_with_time,
-        output_mean_distance,
-        output_standard_deviation_distance,
-        max_topological_reconstruction_time = None,
-        continent_obstacle_filenames = None,
-        anchor_plate_id = 0,
-        proximity_distance_threshold_radians = None,
-        clamp_mean_proximity_distance_radians = None,
-        # If None then defaults to all available CPUs...
-        num_cpus = None):
-
-    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
-    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
-    # which needs to be repeated for each task (group of times) - this is because each age grid involves
-    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
-    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
-    num_age_grids_per_task = 16
-
-    # Create a list of time periods.
-    # Each task will be passed the times within a single time period.
-    task_age_grid_filenames_and_paleo_times_lists = []
-    num_times = len(age_grid_filenames_and_paleo_times)
-    task_start_time_index = 0
-    while task_start_time_index < num_times:
-        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
-        task_age_grid_filenames_and_paleo_times_lists.append(
-                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
-        task_start_time_index += num_age_grids_per_task
-    
-    # If the user requested all available CPUs then attempt to find out how many there are.
-    if not num_cpus:
-        try:
-            num_cpus = multiprocessing.cpu_count()
-        except NotImplementedError:
-            num_cpus = 1
-    
-    #
-    # No need for parallelisation if number of CPUs is one.
-    #
-    # Also can use this when there are exceptions in order to determine which source code line.
-    # Because once goes through multiprocessing pools then lose error locations in source code.
-    #
-    if num_cpus == 1:
-        proximity_datas = {}
-
-        for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists:
-            proximity_data = proximity(
-                    input_points, # List of (lon, lat) tuples.
-                    rotation_filenames,
-                    proximity_filenames,
-                    proximity_features_are_topological,
-                    proximity_feature_types,
-                    topological_reconstruction_filenames,
-                    task_age_grid_filenames_and_paleo_times_list,
-                    time_increment,
-                    output_distance_with_time,
-                    output_mean_distance,
-                    output_standard_deviation_distance,
-                    max_topological_reconstruction_time,
-                    continent_obstacle_filenames,
-                    anchor_plate_id,
-                    proximity_distance_threshold_radians,
-                    clamp_mean_proximity_distance_radians)
-            proximity_datas.update(proximity_data)  # dict update
-            del proximity_data  # free memory now that it's merged
-        
-        return proximity_datas
-    
-    # Split the workload across the CPUs.
-    try:
-        pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-        pool_map_async_result = pool.map_async(
-                proximity_parallel_pool_function,
-                (
-                    (
-                        input_points,
-                        rotation_filenames,
-                        proximity_filenames,
-                        proximity_features_are_topological,
-                        proximity_feature_types,
-                        topological_reconstruction_filenames,
-                        task_age_grid_filenames_and_paleo_times_list,
-                        time_increment,
-                        output_distance_with_time,
-                        output_mean_distance,
-                        output_standard_deviation_distance,
-                        max_topological_reconstruction_time,
-                        continent_obstacle_filenames,
-                        anchor_plate_id,
-                        proximity_distance_threshold_radians,
-                        clamp_mean_proximity_distance_radians
-                    ) for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists
-                ),
-                1) # chunksize
-        
-        # Apparently if we use pool.map_async instead of pool.map and then get the results
-        # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-        # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-        try:
-            pool_proximity_datas = pool_map_async_result.get(999999)
-        except KeyboardInterrupt:
-            # Note: 'finally' block below gets executed before returning.
-            return {}
-    finally:
-        pool.close()
-        pool.join()
-    
-    #
-    # Merge all proximity data from the pools.
-    #
-    proximity_datas = {}
-
-    while pool_proximity_datas:
-        pool_proximity_data = pool_proximity_datas.pop()
-        proximity_datas.update(pool_proximity_data)  # dict update
-        del pool_proximity_data  # free memory now that it's merged
-    
-    return proximity_datas
     
     
 def write_proximity_data(
@@ -1290,6 +1127,218 @@ def write_proximity_data(
     
     # See how much extra memory is used after time/mean/std-dev data is extracted from the ProximityData.
     #memory_profile.print_object_memory_usage(proximity_data, 'proximity_datas[{}] at end of write_proximity_data()'.format(age_grid_paleo_time))
+
+
+def generate_and_write_proximity_data(
+        input_points, # List of (lon, lat) tuples.
+        rotation_filenames,
+        proximity_filenames,
+        proximity_features_are_topological,
+        proximity_feature_types,
+        topological_reconstruction_filenames,
+        age_grid_filenames_and_paleo_times,
+        time_increment,
+        output_distance_with_time,
+        output_mean_distance,
+        output_standard_deviation_distance,
+        output_filename_prefix,
+        output_filename_extension,
+        max_topological_reconstruction_time = None,
+        continent_obstacle_filenames = None,
+        anchor_plate_id = 0,
+        proximity_distance_threshold_radians = None,
+        clamp_mean_proximity_distance_radians = None,
+        output_grd_files = None):
+    
+    proximity_datas = proximity(
+            input_points, # List of (lon, lat) tuples.
+            rotation_filenames,
+            proximity_filenames,
+            proximity_features_are_topological,
+            proximity_feature_types,
+            topological_reconstruction_filenames,
+            age_grid_filenames_and_paleo_times,
+            time_increment,
+            output_distance_with_time,
+            output_mean_distance,
+            output_standard_deviation_distance,
+            max_topological_reconstruction_time,
+            continent_obstacle_filenames,
+            anchor_plate_id,
+            proximity_distance_threshold_radians,
+            clamp_mean_proximity_distance_radians)
+    
+    # Write the distance grid(s) associated with each input age grid.
+    for age_grid_filename, age_grid_paleo_time in age_grid_filenames_and_paleo_times:
+
+        proximity_data = proximity_datas.get(age_grid_paleo_time)  # lookup in dict
+        if not proximity_data:
+            print('WARNING: All ocean basin points are outside the age grid: {}'.format(age_grid_filename), file=sys.stderr)
+            continue
+
+        write_proximity_data(
+                proximity_data,
+                age_grid_paleo_time,
+                output_filename_prefix,
+                output_filename_extension,
+                output_distance_with_time,
+                output_mean_distance,
+                output_standard_deviation_distance,
+                output_grd_files)
+
+
+# Wraps around 'generate_and_write_proximity_data()' so can be used by multiprocessing.Pool.map() which requires a single-argument function.
+def generate_and_write_proximity_data_parallel_pool_function(args):
+    try:
+        return generate_and_write_proximity_data(*args)
+    except KeyboardInterrupt:
+        pass
+
+
+def low_priority():
+    """ Set the priority of the process to below-normal."""
+
+    import sys
+    try:
+        sys.getwindowsversion()
+    except AttributeError:
+        isWindows = False
+    else:
+        isWindows = True
+
+    if isWindows:
+        try:
+            import psutil
+        except ImportError:
+            pass
+        else:
+            p = psutil.Process()
+            p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    else:
+        import os
+
+        os.nice(1)
+
+
+def generate_and_write_proximity_data_parallel(
+        input_points, # List of (lon, lat) tuples.
+        rotation_filenames,
+        proximity_filenames,
+        proximity_features_are_topological,
+        proximity_feature_types,
+        topological_reconstruction_filenames,
+        age_grid_filenames_and_paleo_times,
+        time_increment,
+        output_distance_with_time,
+        output_mean_distance,
+        output_standard_deviation_distance,
+        output_filename_prefix,
+        output_filename_extension,
+        max_topological_reconstruction_time = None,
+        continent_obstacle_filenames = None,
+        anchor_plate_id = 0,
+        proximity_distance_threshold_radians = None,
+        clamp_mean_proximity_distance_radians = None,
+        output_grd_files = None,
+        # If None then defaults to all available CPUs...
+        num_cpus = None):
+
+    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
+    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
+    # which needs to be repeated for each task (group of times) - this is because each age grid involves
+    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
+    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
+    num_age_grids_per_task = 16
+
+    # Create a list of time periods.
+    # Each task will be passed the times within a single time period.
+    task_age_grid_filenames_and_paleo_times_lists = []
+    num_times = len(age_grid_filenames_and_paleo_times)
+    task_start_time_index = 0
+    while task_start_time_index < num_times:
+        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
+        task_age_grid_filenames_and_paleo_times_lists.append(
+                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
+        task_start_time_index += num_age_grids_per_task
+    
+    # If the user requested all available CPUs then attempt to find out how many there are.
+    if not num_cpus:
+        try:
+            num_cpus = multiprocessing.cpu_count()
+        except NotImplementedError:
+            num_cpus = 1
+    
+    #
+    # No need for parallelisation if number of CPUs is one.
+    #
+    # Also can use this when there are exceptions in order to determine which source code line.
+    # Because once goes through multiprocessing pools then lose error locations in source code.
+    #
+    if num_cpus == 1:
+        for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists:
+            generate_and_write_proximity_data(
+                    input_points, # List of (lon, lat) tuples.
+                    rotation_filenames,
+                    proximity_filenames,
+                    proximity_features_are_topological,
+                    proximity_feature_types,
+                    topological_reconstruction_filenames,
+                    task_age_grid_filenames_and_paleo_times_list,
+                    time_increment,
+                    output_distance_with_time,
+                    output_mean_distance,
+                    output_standard_deviation_distance,
+                    output_filename_prefix,
+                    output_filename_extension,
+                    max_topological_reconstruction_time,
+                    continent_obstacle_filenames,
+                    anchor_plate_id,
+                    proximity_distance_threshold_radians,
+                    clamp_mean_proximity_distance_radians,
+                    output_grd_files)
+        return
+    
+    # Split the workload across the CPUs.
+    try:
+        pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
+        pool_map_async_result = pool.map_async(
+                generate_and_write_proximity_data_parallel_pool_function,
+                (
+                    (
+                        input_points,
+                        rotation_filenames,
+                        proximity_filenames,
+                        proximity_features_are_topological,
+                        proximity_feature_types,
+                        topological_reconstruction_filenames,
+                        task_age_grid_filenames_and_paleo_times_list,
+                        time_increment,
+                        output_distance_with_time,
+                        output_mean_distance,
+                        output_standard_deviation_distance,
+                        output_filename_prefix,
+                        output_filename_extension,
+                        max_topological_reconstruction_time,
+                        continent_obstacle_filenames,
+                        anchor_plate_id,
+                        proximity_distance_threshold_radians,
+                        clamp_mean_proximity_distance_radians,
+                        output_grd_files
+                    ) for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists
+                ),
+                1) # chunksize
+        
+        # Apparently if we use pool.map_async instead of pool.map and then get the results
+        # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+        # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+        try:
+            pool_map_async_result.get(999999)
+        except KeyboardInterrupt:
+            # Note: 'finally' block below gets executed before returning.
+            return
+    finally:
+        pool.close()
+        pool.join()
 
 
 if __name__ == '__main__':
@@ -1495,7 +1544,7 @@ if __name__ == '__main__':
                 # Exceeds circumference of Earth so no need for clamping.
                 clamp_mean_proximity_distance_radians = None
         
-        proximity_datas = proximity_parallel(
+        generate_and_write_proximity_data_parallel(
                 input_points,
                 args.rotation_filenames,
                 args.proximity_filenames,
@@ -1507,33 +1556,15 @@ if __name__ == '__main__':
                 args.output_distance_with_time,
                 args.output_mean_distance,
                 args.output_std_dev_distance,
+                args.output_filename_prefix,
+                args.output_filename_extension,
                 args.max_topological_reconstruction_time,
                 args.continent_obstacle_filenames,
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
                 clamp_mean_proximity_distance_radians,
+                (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None,
                 args.num_cpus)
-        
-        if not proximity_datas:
-            raise RuntimeError('No proximity data generated')
-        
-        # Write the distance grid(s) associated with each input age grid.
-        for age_grid_filename, age_grid_paleo_time in args.age_grid_filenames_and_paleo_times:
-
-            proximity_data = proximity_datas.get(age_grid_paleo_time)  # lookup in dict
-            if not proximity_data:
-                print('WARNING: All ocean basin points are outside the age grid: {}'.format(age_grid_filename), file=sys.stderr)
-                continue
-
-            write_proximity_data(
-                    proximity_data,
-                    age_grid_paleo_time,
-                    args.output_filename_prefix,
-                    args.output_filename_extension,
-                    args.output_distance_with_time,
-                    args.output_mean_distance,
-                    args.output_std_dev_distance,
-                    (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None)
         
         sys.exit(0)
     
