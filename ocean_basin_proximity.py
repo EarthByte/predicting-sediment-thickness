@@ -728,6 +728,8 @@ def proximity(
     else:
         clamp_mean_proximity_distance_kms = None
     
+    print('Age grid paleo times:', age_grid_paleo_times)
+    
     cpu_profile.start_proximity()
     cpu_profile.start_read_input_data()
     
@@ -1079,6 +1081,31 @@ def proximity_parallel_pool_function(args):
         pass
 
 
+def low_priority():
+    """ Set the priority of the process to below-normal."""
+
+    import sys
+    try:
+        sys.getwindowsversion()
+    except AttributeError:
+        isWindows = False
+    else:
+        isWindows = True
+
+    if isWindows:
+        try:
+            import psutil
+        except ImportError:
+            pass
+        else:
+            p = psutil.Process()
+            p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    else:
+        import os
+
+        os.nice(1)
+
+
 def proximity_parallel(
         input_points, # List of (lon, lat) tuples.
         rotation_filenames,
@@ -1098,38 +1125,6 @@ def proximity_parallel(
         clamp_mean_proximity_distance_radians = None,
         # If None then defaults to all available CPUs...
         num_cpus = None):
-    
-    # If the user requested all available CPUs then attempt to find out how many there are.
-    if not num_cpus:
-        try:
-            num_cpus = multiprocessing.cpu_count()
-        except NotImplementedError:
-            num_cpus = 1
-    
-    #
-    # No need for parallelisation if number of CPUs is one.
-    #
-    # Also can use this when there are exceptions in order to determine which source code line.
-    # Because once goes through multiprocessing pools then lose error locations in source code.
-    #
-    if num_cpus == 1:
-        return proximity(
-            input_points, # List of (lon, lat) tuples.
-            rotation_filenames,
-            proximity_filenames,
-            proximity_features_are_topological,
-            proximity_feature_types,
-            topological_reconstruction_filenames,
-            age_grid_filenames_and_paleo_times,
-            time_increment,
-            output_distance_with_time,
-            output_mean_distance,
-            output_standard_deviation_distance,
-            max_topological_reconstruction_time,
-            continent_obstacle_filenames,
-            anchor_plate_id,
-            proximity_distance_threshold_radians,
-            clamp_mean_proximity_distance_radians)
 
     # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
     # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
@@ -1149,9 +1144,48 @@ def proximity_parallel(
                 age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
         task_start_time_index += num_age_grids_per_task
     
+    # If the user requested all available CPUs then attempt to find out how many there are.
+    if not num_cpus:
+        try:
+            num_cpus = multiprocessing.cpu_count()
+        except NotImplementedError:
+            num_cpus = 1
+    
+    #
+    # No need for parallelisation if number of CPUs is one.
+    #
+    # Also can use this when there are exceptions in order to determine which source code line.
+    # Because once goes through multiprocessing pools then lose error locations in source code.
+    #
+    if num_cpus == 1:
+        proximity_datas = {}
+
+        for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists:
+            proximity_data = proximity(
+                    input_points, # List of (lon, lat) tuples.
+                    rotation_filenames,
+                    proximity_filenames,
+                    proximity_features_are_topological,
+                    proximity_feature_types,
+                    topological_reconstruction_filenames,
+                    task_age_grid_filenames_and_paleo_times_list,
+                    time_increment,
+                    output_distance_with_time,
+                    output_mean_distance,
+                    output_standard_deviation_distance,
+                    max_topological_reconstruction_time,
+                    continent_obstacle_filenames,
+                    anchor_plate_id,
+                    proximity_distance_threshold_radians,
+                    clamp_mean_proximity_distance_radians)
+            proximity_datas.update(proximity_data)  # dict update
+            del proximity_data  # free memory now that it's merged
+        
+        return proximity_datas
+    
     # Split the workload across the CPUs.
     try:
-        pool = multiprocessing.Pool(num_cpus)
+        pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
         pool_map_async_result = pool.map_async(
                 proximity_parallel_pool_function,
                 (
@@ -1183,7 +1217,7 @@ def proximity_parallel(
             pool_proximity_datas = pool_map_async_result.get(999999)
         except KeyboardInterrupt:
             # Note: 'finally' block below gets executed before returning.
-            return
+            return {}
     finally:
         pool.close()
         pool.join()
@@ -1192,7 +1226,7 @@ def proximity_parallel(
     # Merge all proximity data from the pools.
     #
     proximity_datas = {}
-    
+
     while pool_proximity_datas:
         pool_proximity_data = pool_proximity_datas.pop()
         proximity_datas.update(pool_proximity_data)  # dict update
@@ -1480,6 +1514,9 @@ if __name__ == '__main__':
                 clamp_mean_proximity_distance_radians,
                 args.num_cpus)
         
+        if not proximity_datas:
+            raise RuntimeError('No proximity data generated')
+        
         # Write the distance grid(s) associated with each input age grid.
         for age_grid_filename, age_grid_paleo_time in args.age_grid_filenames_and_paleo_times:
 
@@ -1501,7 +1538,7 @@ if __name__ == '__main__':
         sys.exit(0)
     
     except KeyboardInterrupt:
-        pass
+        sys.exit(1)
     except Exception as exc:
         print('ERROR: {}'.format(exc), file=sys.stderr)
         # Uncomment this to print traceback to location of raised exception.

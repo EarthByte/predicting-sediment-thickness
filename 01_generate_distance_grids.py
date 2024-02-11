@@ -1,9 +1,6 @@
 
 from ptt.utils.call_system_command import call_system_command
-import math
-import multiprocessing
 import os, shutil
-import sys
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 """ ---------- Part 1 of the predicting-sediment-thickness workflow -----------
@@ -120,7 +117,7 @@ if not os.path.exists(output_dir):
     os.mkdir(output_dir)
 
 # ----- 
-def generate_distance_grid(times):
+def generate_distance_grids(times):
     py_cmd='python3'
     if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
         py_cmd = 'python'
@@ -185,14 +182,26 @@ def generate_distance_grid(times):
 
     # Generate a grd (".nc") file for each xyz file.
     command_line.append('-w')
+
+    if use_all_cpus:
+        # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
+        if isinstance(use_all_cpus, bool):
+            num_cpus = None  # use default of all available CPUs
+        # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
+        elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
+            num_cpus = use_all_cpus
+        else:
+            raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
+    else:
+        num_cpus = 1
     
     # Number of cores.
-    command_line.extend(['-c', '1'])
+    # If None then not specified, and defaults to using all available cores.
+    if num_cpus:
+        command_line.extend(['-c', '{}'.format(num_cpus)])
 
     # Distance grids output filename prefix.
     command_line.append('{}/distance_{}'.format(output_dir, grid_spacing))
-    
-    print('Times:', list(times))
     
     #print(' '.join(command_line))
     call_system_command(command_line)
@@ -223,40 +232,6 @@ def generate_distance_grid(times):
             os.remove(src_mean_distance_xy)
 
 
-# Wraps around 'generate_distance_grid()' so can be used by multiprocessing.Pool.map()
-# which requires a single-argument function.
-def generate_distance_grid_parallel_pool_function(args):
-    try:
-        return generate_distance_grid(*args)
-    except KeyboardInterrupt:
-        pass
-
-
-def low_priority():
-    """ Set the priority of the process to below-normal."""
-
-    import sys
-    try:
-        sys.getwindowsversion()
-    except AttributeError:
-        isWindows = False
-    else:
-        isWindows = True
-
-    if isWindows:
-        try:
-            import psutil
-        except ImportError:
-            pass
-        else:
-            p = psutil.Process()
-            p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
-    else:
-        import os
-
-        os.nice(1)
-
-
 if __name__ == '__main__':
 
     #import time as time_prof
@@ -268,63 +243,11 @@ if __name__ == '__main__':
     times = range(min_time, max_time + 1, time_step)
     #times = range(max_time, min_time - 1, -time_step) # Go backwards (can see results sooner).
 
-    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
-    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
-    # which needs to be repeated for each task (group of times) - this is because each age grid involves
-    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
-    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
-    num_age_grids_per_task = 16
-
-    # Create a list of time periods.
-    # Each task will be passed the times within a single time period.
-    task_time_lists = []
-    num_times = len(times)
-    task_start_time_index = 0
-    while task_start_time_index < num_times:
-        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
-        task_time_lists.append(times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
-        task_start_time_index += num_age_grids_per_task
-
-    if use_all_cpus:
+    # Generate the distance grids.
+    try:
+        generate_distance_grids(times)
+    except KeyboardInterrupt:
+        pass
     
-        # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
-        if isinstance(use_all_cpus, bool):
-            try:
-                num_cpus = multiprocessing.cpu_count()
-            except NotImplementedError:
-                num_cpus = 1
-        # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
-        elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
-            num_cpus = use_all_cpus
-        else:
-            raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
-        
-        try:
-            # Split the workload across the CPUs.
-            pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-            pool_map_async_result = pool.map_async(
-                    generate_distance_grid_parallel_pool_function,
-                    (
-                        (
-                            task_time_list,
-                        ) for task_time_list in task_time_lists
-                    ),
-                    1) # chunksize
-            
-            # Apparently if we use pool.map_async instead of pool.map and then get the results
-            # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-            # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-            pool_map_async_result.get(999999)
-        except KeyboardInterrupt:
-            # Note: 'finally' block below gets executed before returning.
-            pass
-        finally:
-            pool.close()
-            pool.join()
-
-    else:
-        for task_time_list in task_time_lists:
-            generate_distance_grid(task_time_list)
-    
-    #tprof_end = time_prof.perf_counter()
-    #print(f"Total time: {tprof_end - tprof_start:.2f} seconds")
+    tprof_end = time_prof.perf_counter()
+    print(f"Total time: {tprof_end - tprof_start:.2f} seconds")
