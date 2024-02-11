@@ -89,8 +89,9 @@ topology_filenames = [
 # If it's 'None' then only the age grid limits how far back each point is reconstructed.
 max_topological_reconstruction_time = 1000  # can be None to just use age grid as the limit
 
-# Distances in the mean distance grids are clamped to this value (in kms).
-proximity_threshold_kms = 3000
+# Optionally clamp mean distances to this value (in kms).
+#clamp_mean_proximity_kms = None
+clamp_mean_proximity_kms = 3000
 
 output_dir = '{}/distances_{}d'.format(output_base_dir, grid_spacing)
 
@@ -171,8 +172,9 @@ def generate_distance_grid(times):
     # Grid spacing.
     command_line.extend(['-i', '{}'.format(grid_spacing)])
 
-    # Proximity threshold - but we're not using here - instead clamping the mean distance grids explicitly below.
-    #command_line.extend(['-q', str(proximity_threshold_kms)])
+    # Optionally clamp mean proximity.
+    if clamp_mean_proximity_kms:
+        command_line.extend(['--clamp_mean_distance', str(clamp_mean_proximity_kms)])
 
     # Don't output distance grids for all reconstruction times.
     # Only outputting a single "mean" (over all reconstruction times) distance grid.
@@ -196,31 +198,29 @@ def generate_distance_grid(times):
     call_system_command(command_line)
     
 
-    # Clamp the mean distance grids (and remove xy files).
-    # Also rename the mean distance grids so that 'time' is at the end of the base filename -
-    # this way we can import them as time-dependent raster into GPlates version 2.0 and earlier.
+    #
+    # Rename the mean distance grids ('.nc') so that they start with 'mean_distance', and so that'time' is at the end
+    # of the base filename (this way we can import them as time-dependent raster into GPlates version 2.0 and earlier).
+    #
+    # Also remove mean distance '.xy' files.
     #
     
     for time in  times:
         src_mean_distance_basename = '{}/distance_{}_{}_mean_distance'.format(output_dir, grid_spacing, time)
         dst_mean_distance_basename = '{}/mean_distance_{}d_{}'.format(output_dir, grid_spacing, time)
         
+        # Rename '.nc' files.
+        src_mean_distance_grid = src_mean_distance_basename + '.nc'
+        dst_mean_distance_grid = dst_mean_distance_basename + '.nc'
+        if os.access(dst_mean_distance_grid, os.R_OK):
+            os.remove(dst_mean_distance_grid)
+        if os.path.exists(src_mean_distance_grid):
+            os.rename(src_mean_distance_grid, dst_mean_distance_grid)
+        
+        # Remove '.xy' files.
         src_mean_distance_xy = src_mean_distance_basename + '.xy'
         if os.access(src_mean_distance_xy, os.R_OK):
             os.remove(src_mean_distance_xy)
-        
-        src_mean_distance_grid = src_mean_distance_basename + '.nc'
-        dst_mean_distance_grid = dst_mean_distance_basename + '.nc'
-        
-        if os.access(dst_mean_distance_grid, os.R_OK):
-            os.remove(dst_mean_distance_grid)
-        
-        # Clamp mean distances.
-        #
-        # Check that the source mean distance grid exists (it might not if all ocean basin points were outside the age grid).
-        if os.access(src_mean_distance_grid, os.R_OK):
-            call_system_command(["gmt", "grdmath", "-fg", str(proximity_threshold_kms), src_mean_distance_grid, "MIN", "=", dst_mean_distance_grid])
-            os.remove(src_mean_distance_grid)
 
 
 # Wraps around 'generate_distance_grid()' so can be used by multiprocessing.Pool.map()

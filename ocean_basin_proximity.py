@@ -566,13 +566,15 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
 # Class to hold all proximity data for a specific age grid paleo time.
 class ProximityData(object):
 
-    def __init__(self, point_lons, point_lats, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time):
+    def __init__(self, point_lons, point_lats, output_mean_proximity, output_standard_deviation_proximity, output_proximity_with_time, clamp_mean_proximity_in_kms=None):
         self.point_lons = point_lons
         self.point_lats = point_lats
 
         self.output_mean_proximity = output_mean_proximity
         self.output_standard_deviation_proximity = output_standard_deviation_proximity
         self.output_proximity_with_time = output_proximity_with_time
+
+        self.clamp_mean_proximity_in_kms = clamp_mean_proximity_in_kms
 
         # Accumulate proximity statistics for each ocean basin point over time.
         if self.output_mean_proximity or self.output_standard_deviation_proximity:
@@ -623,6 +625,11 @@ class ProximityData(object):
                 # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
                 if num_proximities > 0:
                     mean_proximity = sum_proximities / num_proximities
+
+                    # Clamp mean proximity if requested.
+                    if (self.clamp_mean_proximity_in_kms is not None and
+                        mean_proximity > self.clamp_mean_proximity_in_kms):
+                        mean_proximity = self.clamp_mean_proximity_in_kms
 
                     ocean_basin_lon = self.point_lons[point_index]
                     ocean_basin_lat = self.point_lats[point_index]
@@ -676,7 +683,8 @@ def proximity(
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
-        proximity_distance_threshold_radians = None):
+        proximity_distance_threshold_radians = None,
+        clamp_mean_proximity_distance_radians = None):
     """
     Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
     
@@ -713,6 +721,12 @@ def proximity(
         not output_mean_distance and
         not output_standard_deviation_distance):
         raise ValueError('No output specified for ocean basin proximity.')
+    
+    # Convert clamp-mean-proximity-distance from radians to Kms (if it was specified).
+    if clamp_mean_proximity_distance_radians is not None:
+        clamp_mean_proximity_distance_kms = clamp_mean_proximity_distance_radians * pygplates.Earth.mean_radius_in_kms
+    else:
+        clamp_mean_proximity_distance_kms = None
     
     cpu_profile.start_proximity()
     cpu_profile.start_read_input_data()
@@ -847,7 +861,8 @@ def proximity(
                     ocean_basin_reconstructions[age_grid_paleo_time] = ocean_basin_reconstruction
                     # Also create a ProximityData object for the new ocean basin reconstruction.
                     proximity_datas[age_grid_paleo_time] = ProximityData(ocean_basin_reconstruction.point_lons, ocean_basin_reconstruction.point_lats,
-                                                                         output_mean_distance, output_standard_deviation_distance, output_distance_with_time)
+                                                                         output_mean_distance, output_standard_deviation_distance, output_distance_with_time,
+                                                                         clamp_mean_proximity_distance_kms)
                     #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
                     memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
         
@@ -1080,6 +1095,7 @@ def proximity_parallel(
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None,
+        clamp_mean_proximity_distance_radians = None,
         # If None then defaults to all available CPUs...
         num_cpus = None):
     
@@ -1112,7 +1128,8 @@ def proximity_parallel(
             max_topological_reconstruction_time,
             continent_obstacle_filenames,
             anchor_plate_id,
-            proximity_distance_threshold_radians)
+            proximity_distance_threshold_radians,
+            clamp_mean_proximity_distance_radians)
 
     # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
     # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
@@ -1153,7 +1170,8 @@ def proximity_parallel(
                         max_topological_reconstruction_time,
                         continent_obstacle_filenames,
                         anchor_plate_id,
-                        proximity_distance_threshold_radians
+                        proximity_distance_threshold_radians,
+                        clamp_mean_proximity_distance_radians
                     ) for task_age_grid_filenames_and_paleo_times_list in task_age_grid_filenames_and_paleo_times_lists
                 ),
                 1) # chunksize
@@ -1350,10 +1368,14 @@ if __name__ == '__main__':
                      'Note that it is more efficient to process multiple age grids together, and best if their times are close together.')
         parser.add_argument('-t', '--time_increment', type=int, default=1,
                 help='The time increment in My. Value must be an integer. Defaults to 1 My.')
-        parser.add_argument('-q', '--max_distance', type=float,
-                help='The maximum distance in Kms. '
-                     'If specified then distances between ocean basin points and proximity features exceeding this threshold will be ignored '
+        parser.add_argument('-q', '--max_distance_threshold', type=float,
+                help='Distances above this optional maximum distance threshold (in Kms) are *ignored*. '
+                     'If specified then distances (between ocean basin points and proximity features) exceeding this threshold will be *ignored* '
                      '(ocean basin point will not get output or will not contribute to mean / standard deviation), otherwise all distances are included.')
+        parser.add_argument('--clamp_mean_distance', type=float,
+                help='*Mean* distances (in Kms) above this optional maximum mean distance are *clamped* to it. '
+                     'If specified then *mean* distances (between ocean basin points and proximity features) exceeding this value will be *clamped* to it, '
+                     'otherwise mean distances are unclamped.')
         parser.add_argument('-c', '--num_cpus', type=int,
                 help='The number of CPUs to use for calculations. Defaults to all available CPUs.')
         
@@ -1422,13 +1444,22 @@ if __name__ == '__main__':
             input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
         
         # Convert maximum proximity distance from Kms to radians (if it was specified).
-        if args.max_distance is None:
+        if args.max_distance_threshold is None:
             proximity_distance_threshold_radians = None
         else:
-            proximity_distance_threshold_radians = args.max_distance / pygplates.Earth.mean_radius_in_kms
+            proximity_distance_threshold_radians = args.max_distance_threshold / pygplates.Earth.mean_radius_in_kms
             if proximity_distance_threshold_radians > 2 * math.pi:
                 # Exceeds circumference of Earth so no need for threshold.
                 proximity_distance_threshold_radians = None
+        
+        # Convert clamp mean proximity distance from Kms to radians (if it was specified).
+        if args.clamp_mean_distance is None:
+            clamp_mean_proximity_distance_radians = None
+        else:
+            clamp_mean_proximity_distance_radians = args.clamp_mean_distance / pygplates.Earth.mean_radius_in_kms
+            if clamp_mean_proximity_distance_radians > 2 * math.pi:
+                # Exceeds circumference of Earth so no need for clamping.
+                clamp_mean_proximity_distance_radians = None
         
         proximity_datas = proximity_parallel(
                 input_points,
@@ -1446,6 +1477,7 @@ if __name__ == '__main__':
                 args.continent_obstacle_filenames,
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
+                clamp_mean_proximity_distance_radians,
                 args.num_cpus)
         
         # Write the distance grid(s) associated with each input age grid.
