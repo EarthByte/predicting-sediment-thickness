@@ -217,15 +217,15 @@ def generate_distance_grids(times):
     
 
     #
-    # Rename the mean distance grids ('.nc') so that they start with 'mean_distance', and so that'time' is at the end
+    # Rename the mean distance grids ('.nc') so that they start with 'mean_distance', and so that 'time' is at the end
     # of the base filename (this way we can import them as time-dependent raster into GPlates version 2.0 and earlier).
     #
     # Also remove mean distance '.xy' files.
     #
     
-    for time in  times:
-        src_mean_distance_basename = '{}/distance_{}_{}_mean_distance'.format(output_dir, grid_spacing, time)
-        dst_mean_distance_basename = '{}/mean_distance_{}d_{}'.format(output_dir, grid_spacing, time)
+    for time in times:
+        src_mean_distance_basename = '{}/distance_{}_{:.1f}_mean_distance'.format(output_dir, grid_spacing, time)
+        dst_mean_distance_basename = '{}/mean_distance_{}d_{:.1f}'.format(output_dir, grid_spacing, time)
         
         # Rename '.nc' files.
         src_mean_distance_grid = src_mean_distance_basename + '.nc'

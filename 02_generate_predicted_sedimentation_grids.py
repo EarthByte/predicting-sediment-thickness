@@ -59,7 +59,8 @@ distance_grid_spacing = 1   # grid spacing of input distance grids
 grid_spacing = 0.1          # grid spacing of output sedimentation grids
 
 # --- distance grids (from part 1)
-distance_grid_base_path = '{0}/distances_{1}d/mean_distance_{1}d'.format(output_base_dir, distance_grid_spacing)
+#     The "{}" parts are substituted here now (in this str.format() call) whereas the escaped "{{...}}" part is subsituted later (with each 'time').
+distance_grid_filenames_format = '{0}/distances_{1}d/mean_distance_{1}d_{{:.1f}}.nc'.format(output_base_dir, distance_grid_spacing)
 
 # --- output directory name
 sediment_output_sub_dir = 'sedimentation_output'
@@ -104,7 +105,7 @@ def generate_predicted_sedimentation_grid(
             py_cmd,
             predict_sedimentation_script,
             '-d',
-            '{}_{}.nc'.format(distance_grid_base_path, time),
+            distance_grid_filenames_format.format(time),
             '-g',
             age_grid_filenames_format.format(time),
             '-i',
@@ -128,7 +129,7 @@ def generate_predicted_sedimentation_grid(
                 str(scale_sedimentation_rate)])
     command_line.extend([
             '--',
-            '{}/sed_{}_{}'.format(output_dir, grid_spacing, time)])
+            '{}/sed_{}_{:.1f}'.format(output_dir, grid_spacing, time)])
     
     #print('Time:', time)
     #print(command_line)
@@ -141,18 +142,18 @@ def generate_predicted_sedimentation_grid(
     # Rename the average sedimentation rate and sediment thicknesses files so that 'time' is at the
     # end of the base filename - this way we can import them as time-dependent raster into GPlates.
     for ext in ('xy', 'nc'):
-        
-        src_sed_rate = '{}/sed_{}_{}_sed_rate.{}'.format(output_dir, grid_spacing, time, ext)
-        dst_sed_rate = '{}/sed_rate_{}d_{}.{}'.format(output_dir, grid_spacing, time, ext)
-        
+
+        src_sed_rate = '{}/sed_{}_{:.1f}_sed_rate.{}'.format(output_dir, grid_spacing, time, ext)
+        dst_sed_rate = '{}/sed_rate_{}d_{:.1f}.{}'.format(output_dir, grid_spacing, time, ext)
+
         if os.access(dst_sed_rate, os.R_OK):
             os.remove(dst_sed_rate)
         if os.path.exists(src_sed_rate):
             os.rename(src_sed_rate, dst_sed_rate)
-        
-        src_sed_thick = '{}/sed_{}_{}_sed_thick.{}'.format(output_dir, grid_spacing, time, ext)
-        dst_sed_thick = '{}/sed_thick_{}d_{}.{}'.format(output_dir, grid_spacing, time, ext)
-        
+
+        src_sed_thick = '{}/sed_{}_{:.1f}_sed_thick.{}'.format(output_dir, grid_spacing, time, ext)
+        dst_sed_thick = '{}/sed_thick_{}d_{:.1f}.{}'.format(output_dir, grid_spacing, time, ext)
+
         if os.access(dst_sed_thick, os.R_OK):
             os.remove(dst_sed_thick)
         if os.path.exists(src_sed_thick):

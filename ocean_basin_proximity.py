@@ -1082,9 +1082,9 @@ def write_proximity_data(
     
     if output_distance_with_time:
         for time in proximity_data.get_times():
-            xyz_filename = '{}_{}_{:0.2f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
+            xyz_filename = '{}_{:.1f}_{:.1f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
             if output_grd_files:
-                grd_filename = '{}_{}_{:0.2f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
+                grd_filename = '{}_{:.1f}_{:.1f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
             
             write_xyz_file(xyz_filename, proximity_data.get_time_data(time))
             if output_grd_files:
@@ -1096,9 +1096,9 @@ def write_proximity_data(
                         use_nearneighbor=True)
     
     if output_mean_distance:
-        xyz_mean_distance_filename = '{}_{}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
+        xyz_mean_distance_filename = '{}_{:.1f}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
         if output_grd_files:
-            grd_mean_distance_filename = '{}_{}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
+            grd_mean_distance_filename = '{}_{:.1f}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
             
         write_xyz_file(xyz_mean_distance_filename, proximity_data.get_mean_data())
         if output_grd_files:
@@ -1110,9 +1110,9 @@ def write_proximity_data(
                     use_nearneighbor=False)
     
     if output_standard_deviation_distance:
-        xyz_standard_deviation_distance_filename = '{}_{}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
+        xyz_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
         if output_grd_files:
-            grd_standard_deviation_distance_filename = '{}_{}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
+            grd_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
             
         write_xyz_file(xyz_standard_deviation_distance_filename, proximity_data.get_std_dev_data())
         if output_grd_files:
