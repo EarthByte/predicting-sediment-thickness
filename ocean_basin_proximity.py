@@ -728,8 +728,6 @@ def proximity(
     else:
         clamp_mean_proximity_distance_kms = None
     
-    print('Age grid paleo times:', age_grid_paleo_times)
-    
     cpu_profile.start_proximity()
     cpu_profile.start_read_input_data()
     
@@ -1240,26 +1238,8 @@ def generate_and_write_proximity_data_parallel(
         proximity_distance_threshold_radians = None,
         clamp_mean_proximity_distance_radians = None,
         output_grd_files = None,
-        # If None then defaults to all available CPUs...
-        num_cpus = None):
-
-    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
-    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
-    # which needs to be repeated for each task (group of times) - this is because each age grid involves
-    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
-    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
-    num_age_grids_per_task = 16
-
-    # Create a list of time periods.
-    # Each task will be passed the times within a single time period.
-    task_age_grid_filenames_and_paleo_times_lists = []
-    num_times = len(age_grid_filenames_and_paleo_times)
-    task_start_time_index = 0
-    while task_start_time_index < num_times:
-        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
-        task_age_grid_filenames_and_paleo_times_lists.append(
-                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
-        task_start_time_index += num_age_grids_per_task
+        num_cpus = None,  # if None then defaults to all available CPUs
+        max_memory_usage_in_gb = None):  # max memory to use (in GB)
     
     # If the user requested all available CPUs then attempt to find out how many there are.
     if not num_cpus:
@@ -1267,6 +1247,73 @@ def generate_and_write_proximity_data_parallel(
             num_cpus = multiprocessing.cpu_count()
         except NotImplementedError:
             num_cpus = 1
+    
+    num_age_grids = len(age_grid_filenames_and_paleo_times)
+
+    # Give each task a reasonable number of age grids (times) to process - if there's not enough times per task then we'll
+    # spend too much time resolving/reconstructing proximity features (and generating shortest path obstacle grids) -
+    # which needs to be repeated for each task (group of times) - this is because each age grid involves
+    # reconstructing all its ocean points back in time until they disappear (at mid-ocean ridge) and so there's
+    # a lot of overlap in time across the age grids (where calculations can be shared within a single process).
+    min_num_age_grids_per_task = 10
+    
+    # These are rough figures determined empirically by running this script (and using MemoryProfile).
+    #
+    # The base amount of memory usage per task (in GB) to set up for processing (excludes age-grid/ocean-basin reconstructions).
+    base_memory_usage_per_task_in_gb = 2.0
+    # The memory usage per age grid is roughly proportional to the number of input points,
+    # with a uniform lon-lat grid at 1 degree resolution consuming about 6MB.
+    delta_memory_usage_per_age_grid_in_gb = 6e-3 * len(input_points) / (180 * 360)
+    # The total memory used to process the specified number of age grids in a single task.
+    def memory_usage_per_task(num_age_grids_per_task_):
+        return base_memory_usage_per_task_in_gb + num_age_grids_per_task_ * delta_memory_usage_per_age_grid_in_gb
+
+    # If we've been given a limit on memory usage then determine how many age grids to process per task.
+    if max_memory_usage_in_gb:
+        # Loop twice since 'num_cpus' might get adjusted, which will change 'num_age_grids_per_task'.
+        for _ in range(2):
+            # The memory used by the number of age grids per task multiplied by the number of tasks processed in parallel should not exceed the maximum memory usage.
+            num_age_grids_per_task = math.trunc(((max_memory_usage_in_gb / num_cpus) - base_memory_usage_per_task_in_gb) / delta_memory_usage_per_age_grid_in_gb)  # could be negative
+            # But don't reduce below the minimum number of age grids per task.
+            if num_age_grids_per_task < min_num_age_grids_per_task:
+                num_age_grids_per_task = min_num_age_grids_per_task
+                # Adjust the number of CPUs to compensate for the higher than expected number of age grids per task, so that we don't exceed the memory limit.
+                # Number of CPUs is the max memory divided by the memory used to process 'num_age_grids_per_task' age grids.
+                num_cpus = math.trunc(max_memory_usage_in_gb / memory_usage_per_task(num_age_grids_per_task))
+                if num_cpus < 1:
+                    num_cpus = 1
+            elif num_age_grids_per_task > min_num_age_grids_per_task:  # have more than the minimum number of age grids per task...
+                # If there are fewer total tasks than the number of CPUs then reduce the number of age grids per task (but not less than the minimum) so that all CPUs are used.
+                num_total_tasks = math.ceil(num_age_grids / num_age_grids_per_task)
+                if num_cpus > num_total_tasks:
+                    num_age_grids_per_task = math.ceil(num_age_grids / num_cpus)
+                    if num_age_grids_per_task < min_num_age_grids_per_task:
+                        num_age_grids_per_task = min_num_age_grids_per_task
+    else:
+        # No limits on memory usage were specified, so just use the minimum number of age grids per task.
+        num_age_grids_per_task = min_num_age_grids_per_task
+    
+    # If there are more CPUs than tasks then reduce the number of CPUs.
+    num_total_tasks = math.ceil(num_age_grids / num_age_grids_per_task)
+    if num_cpus > num_total_tasks:
+        num_cpus = num_total_tasks
+
+    print('Approximate memory usage: {:.2f}GB'.format(num_cpus * memory_usage_per_task(num_age_grids_per_task)))
+    print('Number of age grids: {}'.format(num_age_grids))
+    print('Number of age grids per task: {}'.format(num_age_grids_per_task))
+    print('Number of total tasks: {}'.format(num_total_tasks))
+    print('Number of tasks in a batch (num CPUs): {}'.format(num_cpus))
+    print('Number of task batches: {}'.format(math.ceil(num_total_tasks / num_cpus)))
+
+    # Create a list of time periods.
+    # Each task will be passed the times within a single time period.
+    task_age_grid_filenames_and_paleo_times_lists = []
+    task_start_time_index = 0
+    while task_start_time_index < num_age_grids:
+        # Pass 'num_age_grids_per_task' consecutive times into each task since the distance calculations are more efficient that way.
+        task_age_grid_filenames_and_paleo_times_lists.append(
+                age_grid_filenames_and_paleo_times[task_start_time_index : task_start_time_index + num_age_grids_per_task])
+        task_start_time_index += num_age_grids_per_task
     
     #
     # No need for parallelisation if number of CPUs is one.
@@ -1445,6 +1492,10 @@ if __name__ == '__main__':
                      'otherwise mean distances are unclamped.')
         parser.add_argument('-c', '--num_cpus', type=int,
                 help='The number of CPUs to use for calculations. Defaults to all available CPUs.')
+        parser.add_argument('-u', '--max_memory_usage', type=int,
+                dest='max_memory_usage_in_gb',
+                help='The maximum amount of memory (in GB) to use (divided across the CPUs). '
+                     'Should ideally be set to the amount of physical RAM (or less). Defaults to unlimited.')
         
         parser.add_argument('-d', '--output_distance_with_time', action='store_true',
                 help='For each input point at each time during its lifetime write its distance to the nearest feature. '
@@ -1553,7 +1604,8 @@ if __name__ == '__main__':
                 proximity_distance_threshold_radians,
                 clamp_mean_proximity_distance_radians,
                 (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None,
-                args.num_cpus)
+                args.num_cpus,
+                args.max_memory_usage_in_gb)
         
         sys.exit(0)
     

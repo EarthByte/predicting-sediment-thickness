@@ -31,8 +31,14 @@ Outputs:
 # If a positive integer then use that specific number of CPUs (cores).
 #
 #use_all_cpus = False
-#use_all_cpus = 16
-use_all_cpus = True
+use_all_cpus = 4
+#use_all_cpus = True
+
+# The maximum amount of memory (in GB) to use (it's divided across the CPUs).
+# Set to the amount of physical RAM (or less).
+# If set to 'None' then there is no limit.
+#max_memory_usage_in_gb = None
+max_memory_usage_in_gb = 16
 
 output_base_dir = '.'
 
@@ -197,7 +203,11 @@ def generate_distance_grids(times):
     # Number of cores.
     # If None then not specified, and defaults to using all available cores.
     if num_cpus:
-        command_line.extend(['-c', '{}'.format(num_cpus)])
+        command_line.extend(['--num_cpus', '{}'.format(num_cpus)])
+    
+    # The maximum amount of memory (in GB) to use (divided across the CPUs).
+    if max_memory_usage_in_gb:
+        command_line.extend(['--max_memory_usage', '{}'.format(max_memory_usage_in_gb)])
 
     # Distance grids output filename prefix.
     command_line.append('{}/distance_{}'.format(output_dir, grid_spacing))

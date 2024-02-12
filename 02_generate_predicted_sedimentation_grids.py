@@ -42,8 +42,8 @@ Outputs:
 # If a positive integer then use that specific number of CPUs (cores).
 #
 #use_all_cpus = False
-#use_all_cpus = 4
-use_all_cpus = True
+use_all_cpus = 4
+#use_all_cpus = True
 
 output_base_dir = '.'
 
