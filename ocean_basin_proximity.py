@@ -1344,25 +1344,6 @@ def generate_and_write_proximity_data_parallel(
 if __name__ == '__main__':
     
     import traceback
-        
-    # Action to parse a list of pairs of age grid filename and paleo time.
-    class AgeGridFilenameAndPaleoTimePairsAction(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
-            # Should be an even number of numbers.
-            if len(values) % 2 != 0:
-                parser.error('the pairs of age grid filename and paleo time must be supplied as *pairs* (ie, an even number of arguments)')
-            
-            list_of_age_grid_filename_and_paleo_time = []
-            try:
-                num_age_grids = len(values) // 2
-                for age_grid_index in range(num_age_grids):
-                    age_grid_filename = values[2 * age_grid_index]
-                    age_grid_paleo_time = int(values[2 * age_grid_index + 1])
-                    list_of_age_grid_filename_and_paleo_time.append((age_grid_filename, age_grid_paleo_time))
-            except ValueError:
-                raise argparse.ArgumentTypeError("encountered an age grid paleo time that is not an integer")
-
-            setattr(namespace, self.dest, list_of_age_grid_filename_and_paleo_time)
     
     __description__ = \
     """Find the minimum distance of ocean basin point locations to proximity features (topological boundaries or non-topological features) over time.
@@ -1445,10 +1426,13 @@ if __name__ == '__main__':
                      'Ocean points are not reconstructed earlier than this time '
                      '(each ocean point is reconstructed back to its age grid value or this value, whichever is smaller). '
                      'Value must be an integer. If not specified then only the age grid limits how far back each point is reconstructed.')
-        parser.add_argument('-g', '--age_grid_filenames_and_paleo_times', nargs='+', action=AgeGridFilenameAndPaleoTimePairsAction, required=True,
-                metavar='age_grid_filename age_grid_paleo_time',
-                help='One of more pairs of age grid filename and time of age grid (must be integer). '
-                     'Note that it is more efficient to process multiple age grids together, and best if their times are close together.')
+        parser.add_argument('-g', '--age_grid_filenames_format', type=str, required=True,
+                help='The format string to generate age grid filenames (using the age grid paleo times). '
+                     'For example, "/Users/me/AgeGridData/Muller2019-Young2019-Cao2020_AgeGrid-{:.0f}.nc" where "{:.0f}" (see Python\'s str.format() function) '
+                     'will get replaced with each age grid time (from the "--age_grid_paleo_times" option) using zero decimal places (ie, integer times).')
+        parser.add_argument('-p', '--age_grid_paleo_times', type=float, nargs='+', required=True,
+                help='The age grid paleo times. These will be used together with the age grid filenames format (from the "--age_grid_filenames_format" option) to generate '
+                     'the age grid filenames. Note that it is more efficient to process multiple age grids together, and best if their times are close together.')
         parser.add_argument('-t', '--time_increment', type=int, default=1,
                 help='The time increment in My. Value must be an integer. Defaults to 1 My.')
         parser.add_argument('-q', '--max_distance_threshold', type=float,
@@ -1510,6 +1494,11 @@ if __name__ == '__main__':
             not args.output_std_dev_distance):
             args.output_distance_with_time = True
         
+        # Generate a list of tuples of age grid filename and paleo time.
+        # These are generated from the age grid filenames format and a list of age grid paleo times.
+        age_grid_filenames_and_paleo_times = [(args.age_grid_filenames_format.format(age_grid_paleo_time), age_grid_paleo_time)
+                                              for age_grid_paleo_time in args.age_grid_paleo_times]
+        
         if args.ocean_basin_points_filename is not None:
             if args.ocean_basin_grid_spacing is not None:
                 raise argparse.ArgumentTypeError(
@@ -1551,7 +1540,7 @@ if __name__ == '__main__':
                 not args.non_topological_proximity_features, # proximity_features_are_topological
                 args.proximity_feature_types,
                 args.topological_reconstruction_filenames,
-                args.age_grid_filenames_and_paleo_times,
+                age_grid_filenames_and_paleo_times,
                 args.time_increment,
                 args.output_distance_with_time,
                 args.output_mean_distance,

@@ -35,11 +35,22 @@ Outputs:
 # --- Set paths and various parameters
 # ------------------------------------------
 
+# Use all CPUs.
+#
+# If False then use a single CPU.
+# If True then use all CPUs (cores).
+# If a positive integer then use that specific number of CPUs (cores).
+#
+#use_all_cpus = False
+#use_all_cpus = 4
+use_all_cpus = True
+
 output_base_dir = '.'
 
 # ------------------------------------------
 # --- set times and spacing
 
+# Generate sedimentation grids for times in the range [min_time, max_time] at 'time_step' intervals.
 min_time = 0
 max_time = 250
 time_step = 1
@@ -54,20 +65,12 @@ distance_grid_base_path = '{0}/distances_{1}d/mean_distance_{1}d'.format(output_
 sediment_output_sub_dir = 'sedimentation_output'
 
 # --- agegrids
-agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
-agegrid_filename_prefix = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
-agegrid_filename_suffix = ''    # everything after 'time' (excluding the extension), eg, "Ma"
-agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
-
-# Use all CPUs.
 #
-# If False then use a single CPU.
-# If True then use all CPUs (cores).
-# If a positive integer then use that specific number of CPUs (cores).
-#
-#use_all_cpus = False
-#use_all_cpus = 4
-use_all_cpus = True
+#     The format string to generate age grid filenames (using the age grid paleo times in the range [min_time, max_time]).
+#     Use a string section like "{:.1f}" to for the age grid paleo time. The ".1f" part means use the paleo time to one decimal place
+#     (see Python\'s str.format() function) such that a time of 100 would be substituted as "100.0".
+#     This string section will get replaced with each age grid time in turn (to generate the actual age grid filenames).
+age_grid_filenames_format = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF/Muller2019-Young2019-Cao2020_AgeGrid-{:.0f}.nc'
 
 # ------------------------------------------
 # END USER INPUT
@@ -103,7 +106,7 @@ def generate_predicted_sedimentation_grid(
             '-d',
             '{}_{}.nc'.format(distance_grid_base_path, time),
             '-g',
-            '{}/{}{}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, float(time), agegrid_filename_suffix, agegrid_filename_ext),
+            age_grid_filenames_format.format(time),
             '-i',
             str(grid_spacing),
             '-w',

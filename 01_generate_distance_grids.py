@@ -24,6 +24,16 @@ Outputs:
 # --- Set paths and various parameters
 # ------------------------------------------
 
+# Use all CPUs.
+#
+# If False then use a single CPU.
+# If True then use all CPUs (cores).
+# If a positive integer then use that specific number of CPUs (cores).
+#
+#use_all_cpus = False
+#use_all_cpus = 16
+use_all_cpus = True
+
 output_base_dir = '.'
 
 # ------------------------------------------
@@ -66,10 +76,12 @@ continent_obstacle_files = [
 
 # --- location of gplates files on your computer
 # --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
-agegrid_dir = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF'   # change folder name if needed
-agegrid_filename_prefix = 'Muller2019-Young2019-Cao2020_AgeGrid-'    # everything before 'time'
-agegrid_filename_suffix = ''    # everything after 'time' (excluding the extension), eg, "Ma"
-agegrid_filename_ext = 'nc'   # generally 'nc', but sometimes is 'grd'. Do not include the period
+#
+#     The format string to generate age grid filenames (using the age grid paleo times in the range [min_time, max_time]).
+#     Use a string section like "{:.1f}" to for the age grid paleo time. The ".1f" part means use the paleo time to one decimal place
+#     (see Python\'s str.format() function) such that a time of 100 would be substituted as "100.0".
+#     This string section will get replaced with each age grid time in turn (to generate the actual age grid filenames).
+age_grid_filenames_format = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF/Muller2019-Young2019-Cao2020_AgeGrid-{:.0f}.nc'
 
 # --- topologies and other files
 data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
@@ -91,16 +103,6 @@ max_topological_reconstruction_time = 1000  # can be None to just use age grid a
 clamp_mean_proximity_kms = 3000
 
 output_dir = '{}/distances_{}d'.format(output_base_dir, grid_spacing)
-
-# Use all CPUs.
-#
-# If False then use a single CPU.
-# If True then use all CPUs (cores).
-# If a positive integer then use that specific number of CPUs (cores).
-#
-#use_all_cpus = False
-#use_all_cpus = 4
-use_all_cpus = True
 
 # ------------------------------------------
 # END USER INPUT
@@ -147,20 +149,17 @@ def generate_distance_grids(times):
     # Anchor plate ID.
     command_line.extend(['-a', '{}'.format(anchor_plate_id)])
 
-    # Age grid filenames and paleo times.
-    age_grid_filenames_and_times = []
-    for time in times:
-        age_grid_filename = '{}/{}{:.1f}{}.{}'.format(agegrid_dir, agegrid_filename_prefix, time, agegrid_filename_suffix, agegrid_filename_ext)
-        age_grid_filenames_and_times.append(age_grid_filename)
-        age_grid_filenames_and_times.append(str(time))
-    command_line.append('-g')
-    command_line.extend(age_grid_filenames_and_times)
+    # Age grid filenames format.
+    command_line.extend(['--age_grid_filenames_format', age_grid_filenames_format])
+    # Age grid paleo times.
+    command_line.append('--age_grid_paleo_times')
+    command_line.extend(['{}'.format(time) for time in times])
 
     # Use all feature types in proximity file (according to Dietmar)...
     #command_line.extend(['-b', 'PassiveContinentalBoundary'])
 
     # Time increment is 1 Myr (this is for topological reconstruction of the ocean points).
-    command_line.extend(['-t', '1'])
+    command_line.extend(['--time_increment', '1'])
     
     # If limiting the max topological reconstruction time.
     if max_topological_reconstruction_time is not None:
