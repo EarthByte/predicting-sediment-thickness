@@ -139,25 +139,37 @@ def generate_predicted_sedimentation_grid(
     # Execute the command.
     call_system_command(command_line)
     
-    # Rename the average sedimentation rate and sediment thicknesses files so that 'time' is at the
-    # end of the base filename - this way we can import them as time-dependent raster into GPlates.
-    for ext in ('xy', 'nc'):
+    #
+    # Rename the sedimentation rate and thickness grids ('.nc') so that they start with 'sed_rate' and 'sed_thick', and so that 'time' is at the end
+    # of the base filename (this way we can import them as time-dependent raster into GPlates version 2.0 and earlier).
+    #
+    # Also remove '.xy' files.
+    #
 
-        src_sed_rate = '{}/sed_{}_{:.1f}_sed_rate.{}'.format(output_dir, grid_spacing, time, ext)
-        dst_sed_rate = '{}/sed_rate_{}d_{:.1f}.{}'.format(output_dir, grid_spacing, time, ext)
+    def rename_nc_and_remove_xy(src_basename, dst_basename):
 
-        if os.access(dst_sed_rate, os.R_OK):
-            os.remove(dst_sed_rate)
-        if os.path.exists(src_sed_rate):
-            os.rename(src_sed_rate, dst_sed_rate)
-
-        src_sed_thick = '{}/sed_{}_{:.1f}_sed_thick.{}'.format(output_dir, grid_spacing, time, ext)
-        dst_sed_thick = '{}/sed_thick_{}d_{:.1f}.{}'.format(output_dir, grid_spacing, time, ext)
-
-        if os.access(dst_sed_thick, os.R_OK):
-            os.remove(dst_sed_thick)
-        if os.path.exists(src_sed_thick):
-            os.rename(src_sed_thick, dst_sed_thick)
+        # Rename '.nc' files.
+        src_grid = src_basename + '.nc'
+        dst_grid = dst_basename + '.nc'
+        if os.access(dst_grid, os.R_OK):
+            os.remove(dst_grid)
+        if os.path.exists(src_grid):
+            os.rename(src_grid, dst_grid)
+        
+        # Remove '.xy' files.
+        src_xy = src_basename + '.xy'
+        if os.access(src_xy, os.R_OK):
+            os.remove(src_xy)
+    
+    # Sedimentation rate grids.
+    src_sed_rate_basename = '{}/sed_{}_{:.1f}_sed_rate'.format(output_dir, grid_spacing, time)
+    dst_sed_rate_basename = '{}/sed_rate_{}d_{:.1f}'.format(output_dir, grid_spacing, time)
+    rename_nc_and_remove_xy(src_sed_rate_basename, dst_sed_rate_basename)
+    
+    # Sedimentation thickness grids.
+    src_sed_thick_basename = '{}/sed_{}_{:.1f}_sed_thick'.format(output_dir, grid_spacing, time)
+    dst_sed_thick_basename = '{}/sed_thick_{}d_{:.1f}'.format(output_dir, grid_spacing, time)
+    rename_nc_and_remove_xy(src_sed_thick_basename, dst_sed_thick_basename)
 
 
 # Wraps around 'generate_predicted_sedimentation_grid()' so can be used by multiprocessing.Pool.map()
