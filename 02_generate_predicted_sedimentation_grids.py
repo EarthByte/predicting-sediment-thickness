@@ -55,8 +55,8 @@ min_time = 0
 max_time = 250
 time_step = 1
 
-distance_grid_spacing = 1   # grid spacing of input distance grids
-grid_spacing = 0.1          # grid spacing of output sedimentation grids
+distance_grid_spacing = 0.1   # grid spacing of input distance grids
+grid_spacing = 0.1            # grid spacing of output sedimentation grids
 
 # --- distance grids (from part 1)
 #     The "{}" parts are substituted here now (in this str.format() call) whereas the escaped "{{...}}" part is subsituted later (with each 'time').

@@ -28,11 +28,13 @@ from ptt.utils.call_system_command import call_system_command
 import math
 import multiprocessing
 import numpy as np
+import os
 import ptt.utils.points_in_polygons as points_in_polygons
 import ptt.utils.proximity_query as proximity_query
 import pygplates
 import shortest_path
 import sys
+import tempfile
 import time as time_profile
 
 
@@ -273,10 +275,6 @@ class MemoryProfile(object):
 
 # Profile memory usage (currently just the profile() function).
 memory_profile = MemoryProfile(ENABLE_MEMORY_PROFILING)
-
-
-# Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
-DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES = 1
 
 
 # Reads the input xy file and returns a list of (lon, lat) points.
@@ -521,7 +519,7 @@ def write_xyz_file(output_filename, output_data):
             output_file.write(' '.join(str(item) for item in output_line) + '\n')
 
 
-def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes, use_nearneighbor = True):
+def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearneighbor = True):
     
     if use_nearneighbor:
         # The command-line strings to execute GMT 'nearneighbor'.
@@ -537,11 +535,6 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 # Gridline registration is the default so we don't need to force pixel registration...
                 # "-r", # Force pixel registration since data points are at centre of cells.
                 "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
-                #"-R{}/{}/{}/{}".format(
-                #        -180 + 0.5 * grid_spacing,
-                #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
-                #        -90 + 0.5 * grid_spacing,
-                #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
                 "-G{}".format(grd_filename)]
     else:
         # The command-line strings to execute GMT 'xyz2grd'.
@@ -554,15 +547,98 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_l
                 # Use GMT gridline registration since our input point grid has data points on the grid lines.
                 # Gridline registration is the default so we don't need to force pixel registration...
                 # "-r", # Force pixel registration since data points are at centre of cells.
-                "-R-180/180/-90/90",
-                #"-R{}/{}/{}/{}".format(
-                #        -180 + 0.5 * grid_spacing,
-                #        -180 + (num_grid_longitudes - 0.5) * grid_spacing,
-                #        -90 + 0.5 * grid_spacing,
-                #        -90 + (num_grid_latitudes - 0.5) * grid_spacing),
+                "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
                 "-G{}".format(grd_filename)]
     
     call_system_command(gmt_command_line)
+
+
+def get_upscaled_mask_grd_file(upscaled_grid_spacing, age_grid_filename):
+    
+    #tprof_start = time_profile.perf_counter()
+
+    # Temporary upscaled mask grid file.
+    upscaled_mask_grd_file = tempfile.NamedTemporaryFile(delete=True)
+    upscaled_mask_grd_file.close()  # cannot open twice on Windows - close before opening again
+
+    #tprof_upscaled_input_points_start = time_profile.perf_counter()
+
+    # Generate input points at the upscaled grid spacing.
+    upscaled_input_points, _, _ = generate_input_points_grid(upscaled_grid_spacing)
+    upscaled_input_points_data = ''.join('{} {}\n'.format(lon, lat) for lon, lat in upscaled_input_points)
+
+    #tprof_upscaled_input_points_end = time_profile.perf_counter()
+    #print(f"  generate upscaled input points: {tprof_upscaled_input_points_end - tprof_upscaled_input_points_start:.2f} seconds")
+    #tprof_upscaled_mask_data_start = time_profile.perf_counter()
+
+    # Sample age grid at the upscaled grid spacing.
+    upscaled_mask_data = call_system_command(
+            # The command-line strings to execute GMT 'grdtrack'...
+            ["gmt", "grdtrack", "-fg", "-G{}".format(age_grid_filename)],
+            stdin=upscaled_input_points_data,
+            return_stdout=True)
+
+    # Write age grid (at upscaled grid spacing) to the upscaled mask grid file.
+    call_system_command([
+            "gmt",
+            "xyz2grd",
+            "-I{}".format(upscaled_grid_spacing),
+            # Use GMT gridline registration since our input point grid has data points on the grid lines.
+            # Gridline registration is the default so we don't need to force pixel registration...
+            # "-r", # Force pixel registration since data points are at centre of cells.
+            "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
+            "-G{}".format(upscaled_mask_grd_file.name)],
+            stdin=upscaled_mask_data)
+    
+    #tprof_upscaled_mask_data_end = time_profile.perf_counter()
+    #print(f"  create mask: {tprof_upscaled_mask_data_end - tprof_upscaled_mask_data_start:.2f} seconds")
+    #tprof_end = time_profile.perf_counter()
+    #print(f"get_upscaled_mask_grd_file: {tprof_end - tprof_start:.2f} seconds")
+
+    return upscaled_mask_grd_file
+
+
+def write_upscaled_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, upscaled_grid_spacing, upscaled_mask_grd_filename):
+    
+    #tprof_start = time_profile.perf_counter()
+
+    # Temporary upscaled unmasked grid file.
+    upscaled_unmasked_grd_file = tempfile.NamedTemporaryFile(delete=True)
+    upscaled_unmasked_grd_file.close()  # cannot open twice on Windows - close before opening again
+
+    try:
+        #tprof_upscaled_unmasked_grid_start = time_profile.perf_counter()
+
+        # Write the unmasked grid at the upscaled grid spacing.
+        call_system_command([
+                "gmt",
+                "nearneighbor",
+                xyz_filename,
+                "-N8+m1", # Only require a single sample.
+                "-S{}d".format(2 * grid_spacing),
+                "-I{}".format(upscaled_grid_spacing),
+                # Use GMT gridline registration since our input point grid has data points on the grid lines.
+                # Gridline registration is the default so we don't need to force pixel registration...
+                #"-r", # Force pixel registration since data points are at centre of cells.
+                "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
+                "-G{}".format(upscaled_unmasked_grd_file.name)])
+        
+        #tprof_upscaled_unmasked_grid_end = time_profile.perf_counter()
+        #print(f"  nearneighbor: {tprof_upscaled_unmasked_grid_end - tprof_upscaled_unmasked_grid_start:.2f} seconds")
+        #tprof_upscaled_masked_grid_start = time_profile.perf_counter()
+
+        # Since we used 'nearneighbour' above, it expanded outside the age grid mask.
+        # So here we remove any grid values outside the age grid mask (using "OR" operator only looks at whether age grid has NaN values or not).
+        call_system_command(["gmt", "grdmath", "-fg", upscaled_unmasked_grd_file.name, upscaled_mask_grd_filename, "OR", "=", grd_filename])
+
+        #tprof_upscaled_masked_grid_end = time_profile.perf_counter()
+        #print(f"  grdmath: {tprof_upscaled_masked_grid_end - tprof_upscaled_masked_grid_start:.2f} seconds")
+    
+    finally:
+        os.unlink(upscaled_unmasked_grd_file.name)  # remove temp file (because we set 'delete=False')
+    
+    #tprof_end = time_profile.perf_counter()
+    #print(f"write_upscaled_grd_file_from_xyz: {tprof_end - tprof_start:.2f} seconds")
 
 
 # Class to hold all proximity data for a specific age grid paleo time.
@@ -1073,8 +1149,8 @@ def proximity(
     
     
 def write_proximity_data(
-        proximity_data,
-        age_grid_paleo_time,
+        proximity_datas,
+        age_grid_filenames_and_paleo_times,
         output_filename_prefix,
         output_filename_extension,
         output_distance_with_time,
@@ -1082,51 +1158,84 @@ def write_proximity_data(
         output_standard_deviation_distance,
         output_grd_files = None):
     
-    if output_distance_with_time:
-        for time in proximity_data.get_times():
-            xyz_filename = '{}_{:.1f}_{:.1f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
-            if output_grd_files:
-                grd_filename = '{}_{:.1f}_{:.1f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
-            
-            write_xyz_file(xyz_filename, proximity_data.get_time_data(time))
-            if output_grd_files:
-                grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-                write_grd_file_from_xyz(
-                        grd_filename, xyz_filename, grid_spacing,
-                        num_grid_longitudes, num_grid_latitudes,
-                        # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
-                        use_nearneighbor=True)
     
-    if output_mean_distance:
-        xyz_mean_distance_filename = '{}_{:.1f}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
-        if output_grd_files:
-            grd_mean_distance_filename = '{}_{:.1f}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
-            
-        write_xyz_file(xyz_mean_distance_filename, proximity_data.get_mean_data())
-        if output_grd_files:
-            grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-            write_grd_file_from_xyz(
-                    grd_mean_distance_filename, xyz_mean_distance_filename,
-                    grid_spacing, num_grid_longitudes, num_grid_latitudes,
-                    # Using original (grid-aligned) points so don't near nearest neighbour filtering...
-                    use_nearneighbor=False)
+    # Write the distance grid(s) associated with each input age grid.
+    for age_grid_filename, age_grid_paleo_time in age_grid_filenames_and_paleo_times:
+
+        proximity_data = proximity_datas.get(age_grid_paleo_time)  # lookup in dict
+        if not proximity_data:
+            print('WARNING: All ocean basin points are outside the age grid: {}'.format(age_grid_filename), file=sys.stderr)
+            continue
+
+        # Create a temporary mask grid file (matching age grid mask) at our upscaled grid spacing.
+        # We only do this if we're outputting mean/std-dev grids, and if upscaling has been enabled.
+        upscaled_mask_grd_file = None
+        if output_mean_distance or output_standard_deviation_distance:
+            if output_grd_files:
+                _, upscale_mean_std_dev_grid_spacing = output_grd_files
+                if upscale_mean_std_dev_grid_spacing is not None:
+                    upscaled_mask_grd_file = get_upscaled_mask_grd_file(upscale_mean_std_dev_grid_spacing, age_grid_filename)
     
-    if output_standard_deviation_distance:
-        xyz_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
-        if output_grd_files:
-            grd_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
+        if output_distance_with_time:
+
+            for time in proximity_data.get_times():
+
+                xyz_filename = '{}_{:.1f}_{:.1f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
+                write_xyz_file(xyz_filename, proximity_data.get_time_data(time))
+
+                if output_grd_files:
+                    grd_filename = '{}_{:.1f}_{:.1f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
+                    ocean_basin_grid_spacing, _ = output_grd_files
+                    write_grd_file_from_xyz(
+                            grd_filename, xyz_filename, ocean_basin_grid_spacing,
+                            # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
+                            use_nearneighbor=True)
+        
+        if output_mean_distance:
+
+            xyz_mean_distance_filename = '{}_{:.1f}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
+            write_xyz_file(xyz_mean_distance_filename, proximity_data.get_mean_data())
             
-        write_xyz_file(xyz_standard_deviation_distance_filename, proximity_data.get_std_dev_data())
-        if output_grd_files:
-            grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_files
-            write_grd_file_from_xyz(
-                    grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename,
-                    grid_spacing, num_grid_longitudes, num_grid_latitudes,
-                    # Using original (grid-aligned) points so don't near nearest neighbour filtering...
-                    use_nearneighbor=False)
+            if output_grd_files:
+                grd_mean_distance_filename = '{}_{:.1f}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
+                ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
+                if upscale_mean_std_dev_grid_spacing is not None:
+                    write_upscaled_grd_file_from_xyz(
+                            grd_mean_distance_filename, xyz_mean_distance_filename,
+                            ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing,
+                            upscaled_mask_grd_file.name)
+                else:
+                    write_grd_file_from_xyz(
+                            grd_mean_distance_filename, xyz_mean_distance_filename, ocean_basin_grid_spacing,
+                            # Using original (grid-aligned) points so don't near nearest neighbour filtering...
+                            use_nearneighbor=False)
+        
+        if output_standard_deviation_distance:
+
+            xyz_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
+            write_xyz_file(xyz_standard_deviation_distance_filename, proximity_data.get_std_dev_data())
+
+            if output_grd_files:
+                grd_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
+                ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
+                if upscale_mean_std_dev_grid_spacing is not None:
+                    write_upscaled_grd_file_from_xyz(
+                            grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename,
+                            ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing,
+                            upscaled_mask_grd_file.name)
+                else:
+                    write_grd_file_from_xyz(
+                            grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename, ocean_basin_grid_spacing,
+                            # Using original (grid-aligned) points so don't near nearest neighbour filtering...
+                            use_nearneighbor=False)
+        
+        # Remove temporary mask grid file (if we created it).
+        if upscaled_mask_grd_file is not None:
+            os.unlink(upscaled_mask_grd_file.name)  # remove temp file (because we set 'delete=False')
     
     # See how much extra memory is used after time/mean/std-dev data is extracted from the ProximityData.
-    #memory_profile.print_object_memory_usage(proximity_data, 'proximity_datas[{}] at end of write_proximity_data()'.format(age_grid_paleo_time))
+    #for proximity_data_time in proximity_datas.keys():
+    #    memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}] at end of write_proximity_data()'.format(proximity_data_time))
 
 
 def generate_and_write_proximity_data(
@@ -1167,24 +1276,16 @@ def generate_and_write_proximity_data(
             anchor_plate_id,
             proximity_distance_threshold_radians,
             clamp_mean_proximity_distance_radians)
-    
-    # Write the distance grid(s) associated with each input age grid.
-    for age_grid_filename, age_grid_paleo_time in age_grid_filenames_and_paleo_times:
 
-        proximity_data = proximity_datas.get(age_grid_paleo_time)  # lookup in dict
-        if not proximity_data:
-            print('WARNING: All ocean basin points are outside the age grid: {}'.format(age_grid_filename), file=sys.stderr)
-            continue
-
-        write_proximity_data(
-                proximity_data,
-                age_grid_paleo_time,
-                output_filename_prefix,
-                output_filename_extension,
-                output_distance_with_time,
-                output_mean_distance,
-                output_standard_deviation_distance,
-                output_grd_files)
+    write_proximity_data(
+            proximity_datas,
+            age_grid_filenames_and_paleo_times,
+            output_filename_prefix,
+            output_filename_extension,
+            output_distance_with_time,
+            output_mean_distance,
+            output_standard_deviation_distance,
+            output_grd_files)
 
 
 # Wraps around 'generate_and_write_proximity_data()' so can be used by multiprocessing.Pool.map() which requires a single-argument function.
@@ -1516,11 +1617,13 @@ if __name__ == '__main__':
         
         parser.add_argument('-i', '--ocean_basin_grid_spacing', type=float,
                 help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
-                     'The grid point latitudes/longitudes are offset by half the grid spacing '
-                     '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
-                     'Can only be specified if "ocean_basin_points_filename" is not specified. '
-                     'Defaults to {} degrees.'.format(
-                            DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
+                     'The grid points follow GMT gridline registration (ie, include the poles, and start/end on the dateline). '
+                     'Can only be specified if "ocean_basin_points_filename" is not specified.')
+        parser.add_argument('--upscale_mean_std_dev_grid_spacing', type=float,
+                help='The grid spacing (in degrees) of mean and standard deviation distance grids can optionally be upscaled '
+                     '(from the grid spacing of "--ocean_basin_grid_spacing"). '
+                     'The grid points follow GMT gridline registration (ie, include the poles, and start/end on the dateline). '
+                     'Can only be specified if "output_grd_files" is also specified but not "ocean_basin_points_filename".')
         
         def parse_unicode(value_string):
             return value_string
@@ -1529,7 +1632,8 @@ if __name__ == '__main__':
                 metavar='ocean_basin_points_filename',
                 help='Optional input xy file containing the ocean basin point locations. '
                      'If not specified then a uniform lon/lat grid of points is generated. '
-                     'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_files" are not specified.')
+                     'Can only be specified if "ocean_basin_grid_spacing", "upscale_mean_std_dev_grid_spacing" '
+                     'and "output_grd_files" are not specified.')
         
         parser.add_argument('output_filename_prefix', type=parse_unicode,
                 metavar='output_filename_prefix',
@@ -1554,18 +1658,22 @@ if __name__ == '__main__':
         
         if args.ocean_basin_points_filename is not None:
             if args.ocean_basin_grid_spacing is not None:
-                raise argparse.ArgumentTypeError(
-                    "'ocean_basin_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
+                raise argparse.ArgumentTypeError("'ocean_basin_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
+            if args.upscale_mean_std_dev_grid_spacing is not None:
+                raise argparse.ArgumentTypeError("'upscale_mean_std_dev_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
             if args.output_grd_files is not None:
-                raise argparse.ArgumentTypeError(
-                    "'output_grd_files' and 'ocean_basin_points_filename' cannot both be specified.")
+                raise argparse.ArgumentTypeError("'output_grd_files' and 'ocean_basin_points_filename' cannot both be specified.")
+        else:  # args.ocean_basin_points_filename not specified...
+            if args.ocean_basin_grid_spacing is None:
+                raise argparse.ArgumentTypeError("'ocean_basin_grid_spacing' must be specified if 'ocean_basin_points_filename' is not specified.")
+            if args.upscale_mean_std_dev_grid_spacing is not None:
+                if args.output_grd_files is None:
+                    raise argparse.ArgumentTypeError("'upscale_mean_std_dev_grid_spacing' can only be specified if 'output_grd_files' is also specified.")
         
         # Get the input points.
         if args.ocean_basin_points_filename is not None:
             input_points = read_input_points(args.ocean_basin_points_filename)
         else:
-            if args.ocean_basin_grid_spacing is None:
-                args.ocean_basin_grid_spacing = DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES
             input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
         
         # Convert maximum proximity distance from Kms to radians (if it was specified).
@@ -1605,7 +1713,7 @@ if __name__ == '__main__':
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
                 clamp_mean_proximity_distance_radians,
-                (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_files else None,
+                (args.ocean_basin_grid_spacing, args.upscale_mean_std_dev_grid_spacing) if args.output_grd_files else None,
                 args.num_cpus,
                 args.max_memory_usage_in_gb)
         
