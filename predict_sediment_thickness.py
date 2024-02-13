@@ -26,6 +26,7 @@
 import argparse
 from ptt.utils.call_system_command import call_system_command
 import math
+import numpy as np
 import sys
 
 
@@ -63,7 +64,7 @@ def read_input_points(input_points_filename):
 
             input_points.append((lon, lat))
     
-    return input_points
+    return np.array(input_points)  # numpy array uses less memory
 
 
 def generate_input_points_grid(grid_spacing_degrees):
@@ -71,19 +72,21 @@ def generate_input_points_grid(grid_spacing_degrees):
     if grid_spacing_degrees == 0:
         return
     
-    input_points = []
-    
     # Data points start *on* dateline (-180).
     # If 180 is an integer multiple of grid spacing then final longitude also lands on dateline (+180).
     num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
     num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
+
+    input_points = np.full((num_latitudes * num_longitudes, 2), (0.0, 0.0), dtype=float)  # numpy array uses less memory
+    input_point_index = 0
     for lat_index in range(num_latitudes):
         lat = -90 + lat_index * grid_spacing_degrees
         
         for lon_index in range(num_longitudes):
             lon = -180 + lon_index * grid_spacing_degrees
             
-            input_points.append((lon, lat))
+            input_points[input_point_index] = (lon, lat)
+            input_point_index += 1
     
     return (input_points, num_longitudes, num_latitudes)
 
