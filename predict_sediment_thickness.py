@@ -93,15 +93,15 @@ def generate_input_points_grid(grid_spacing_degrees):
 
 # Returns a list of scalars (one per (lon, lat) point in the 'input_points' list).
 # For input points outside the scalar grid then scalars will be Nan (ie, 'math.isnan(scalar)' will return True).
-def get_positions_and_scalars(input_points, scalar_grid_filename, max_scalar=None):
+def get_ages_and_distances(input_points, age_grid_filename, distance_grid_filename, max_age=None, max_distance=None):
     
     input_points_data = ''.join('{0} {1}\n'.format(lon, lat) for lon, lat in input_points)
 
     # The command-line strings to execute GMT 'grdtrack'.
-    grdtrack_command_line = ["gmt", "grdtrack", "-G{0}".format(scalar_grid_filename)]
+    grdtrack_command_line = ["gmt", "grdtrack", "-G{0}".format(age_grid_filename), "-G{0}".format(distance_grid_filename)]
     stdout_data = call_system_command(grdtrack_command_line, stdin=input_points_data, return_stdout=True)
     
-    lon_lat_scalar_list = []
+    lon_lat_age_distance_list = []
     
     # Read lon, lat and scalar values from the output of 'grdtrack'.
     for line in stdout_data.splitlines():
@@ -115,35 +115,34 @@ def get_positions_and_scalars(input_points, scalar_grid_filename, max_scalar=Non
         if num_values == 0:
             continue
         
-        if num_values < 3:
-            print('Ignoring line "{0}" - has fewer than 3 white-space separated numbers.'.format(line), file=sys.stderr)
+        if num_values < 4:
+            print('Ignoring line "{0}" - has fewer than 4 white-space separated numbers.'.format(line), file=sys.stderr)
             continue
             
         try:
             # Convert strings to numbers.
             lon = float(line_data[0])
             lat = float(line_data[1])
+            age = float(line_data[2])
+            distance = float(line_data[3])
             
-            # The scalar got appended to the last column by 'grdtrack'.
-            scalar = float(line_data[-1])
-            
-            # If the point is outside the grid then the scalar grid will return 'NaN'.
-            if math.isnan(scalar):
-                #print('Ignoring line "{0}" - point is outside scalar grid.'.format(line), file=sys.stderr)
+            # Exclude if either age or distance is NaN.
+            if math.isnan(age) or math.isnan(distance):
                 continue
             
-            # Clamp to max value if requested.
-            if (max_scalar is not None and
-                scalar > max_scalar):
-                scalar = max_scalar
+            # Clamp to max values if requested.
+            if max_age is not None and age > max_age:
+                age = max_age
+            if max_distance is not None and distance > max_distance:
+                distance = max_distance
             
         except ValueError:
-            print('Ignoring line "{0}" - cannot read floating-point lon, lat and scalar values.'.format(line), file=sys.stderr)
+            print('Ignoring line "{0}" - cannot read floating-point lon, lat, age and distance values.'.format(line), file=sys.stderr)
             continue
         
-        lon_lat_scalar_list.append((lon, lat, scalar))
+        lon_lat_age_distance_list.append((lon, lat, age, distance))
     
-    return lon_lat_scalar_list
+    return np.array(lon_lat_age_distance_list)  # numpy array uses less memory
 
 
 def write_xyz_file(output_filename, output_data):
@@ -215,19 +214,7 @@ def predict_sedimentation(
     """
     
     # Get the input point ages and mean distances to passive continental margins.
-    lon_lat_age_list = get_positions_and_scalars(input_points, age_grid_filename, max_age)
-    lon_lat_distance_list = get_positions_and_scalars(input_points, distance_grid_filename, max_distance)
-    if not lon_lat_age_list or not lon_lat_distance_list:
-        return
-    
-    # Merge the age and distance lists.
-    # Only keep points where there are age *and* distance values.
-    lon_lat_age_distance_list = []
-    age_dict = dict(((lon, lat), age) for lon, lat, age in lon_lat_age_list)
-    for lon, lat, distance in lon_lat_distance_list:
-        if (lon, lat) in age_dict:
-            age = age_dict[(lon, lat)]
-            lon_lat_age_distance_list.append((lon, lat, age, distance))
+    lon_lat_age_distance_array = get_ages_and_distances(input_points, age_grid_filename, distance_grid_filename, max_age, max_distance)
     
     #
     # Calculate mean/variance statistics on the age/distance data.
@@ -238,12 +225,12 @@ def predict_sedimentation(
     #sum_square_ages = 0
     #sum_distances = 0
     #sum_square_distances = 0
-    #for lon, lat, age, distance in lon_lat_age_distance_list:
+    #for lon, lat, age, distance in lon_lat_age_distance_array:
     #    sum_ages += age
     #    sum_square_ages += age * age
     #    sum_distances += distance
     #    sum_square_distances += distance * distance
-    #num_age_distance_points = len(lon_lat_age_distance_list)
+    #num_age_distance_points = len(lon_lat_age_distance_array)
     #mean_age = sum_ages / num_age_distance_points
     #mean_distance = sum_distances / num_age_distance_points
     #variance_age = (sum_square_ages / num_age_distance_points) - (mean_age * mean_age)
@@ -252,20 +239,22 @@ def predict_sedimentation(
     std_deviation_age = math.sqrt(variance_age)
     std_deviation_distance = math.sqrt(variance_distance)
     
-    # For each ocean basin point predict compacted sediment thickness and determine the average sedimentation rate.
-    lon_lat_average_sedimentation_rate_list = []
-    lon_lat_sediment_thickness_list = []
-    for lon, lat, age, distance in lon_lat_age_distance_list:
+    # For each ocean basin point predict compacted sediment thickness.
+    lon_lat_sediment_thickness_array = np.full((len(lon_lat_age_distance_array), 3), (0.0, 0.0, 0.0), dtype=float)  # numpy array uses less memory
+    point_index = 0
+    for lon, lat, age, distance in lon_lat_age_distance_array:
         
         predicted_sediment_thickness = predict_sediment_thickness(
                 age, distance,
                 mean_age, mean_distance,
                 std_deviation_age, std_deviation_distance,
                 age_distance_polynomial_coefficients)
-        lon_lat_sediment_thickness_list.append((lon, lat, predicted_sediment_thickness))
+        
+        lon_lat_sediment_thickness_array[point_index] = (lon, lat, predicted_sediment_thickness)
+        point_index += 1
     
-    return lon_lat_sediment_thickness_list
-    
+    return lon_lat_sediment_thickness_array
+
     
 def write_sediment_data(
         sediment_thickness_data,
