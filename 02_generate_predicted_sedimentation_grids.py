@@ -13,7 +13,8 @@ Requirements amd Inputs:
     - Python scripts (predict_sediment_thickness.py, predict sedimentation_rate.py) - should be in this directory
     - GMT 5 (or later)
     - Files associated with a tectonic model, in particular, the agegrids
-    - pygplates
+    - PlateTectonicTools
+    - pyGPlates
 
 To modify the sediment thickness relationship (e.g. for a new present-day agegrid or sediment thickness grid),
 you will need to relcalculate the polynomial coefficients, and enter them into this script.
@@ -28,11 +29,11 @@ Outputs:
 
 2020-02-25: Added comments, created folders within the script itself
 2022-08-26: Update parameters for GlobSed and latest agegrids. Modify dirs to be consistent with pt1
+2024-02:    Improved memory usage.
 """
 
-# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # ------------------------------------------
-# --- Set paths and various parameters
+# BEGIN USER INPUT
 # ------------------------------------------
 
 # Use all CPUs.
@@ -45,10 +46,8 @@ Outputs:
 use_all_cpus = 4
 #use_all_cpus = True
 
+# Base output directory.
 output_base_dir = '.'
-
-# ------------------------------------------
-# --- set times and spacing
 
 # Generate sedimentation grids for times in the range [min_time, max_time] at 'time_step' intervals.
 min_time = 0
@@ -58,24 +57,25 @@ time_step = 1
 distance_grid_spacing = 0.1   # grid spacing of input distance grids
 grid_spacing = 0.1            # grid spacing of output sedimentation grids
 
-# --- distance grids (from part 1)
+# Distance grid files (from part 1)
 #     The "{}" parts are substituted here now (in this str.format() call) whereas the escaped "{{...}}" part is subsituted later (with each 'time').
 distance_grid_filenames_format = '{0}/distances_{1}d/mean_distance_{1}d_{{:.1f}}.nc'.format(output_base_dir, distance_grid_spacing)
 
-# --- output directory name
+# Output directory name.
 sediment_output_sub_dir = 'sedimentation_output'
 
-# --- agegrids
+# Age grid files.
 #
-#     The format string to generate age grid filenames (using the age grid paleo times in the range [min_time, max_time]).
-#     Use a string section like "{:.1f}" to for the age grid paleo time. The ".1f" part means use the paleo time to one decimal place
-#     (see Python\'s str.format() function) such that a time of 100 would be substituted as "100.0".
-#     This string section will get replaced with each age grid time in turn (to generate the actual age grid filenames).
+# The format string to generate age grid filenames (using the age grid paleo times in the range [min_time, max_time]).
+# Use a string section like "{:.1f}" to for the age grid paleo time. The ".1f" part means use the paleo time to one decimal place
+# (see Python\'s str.format() function) such that a time of 100 would be substituted as "100.0".
+# This string section will get replaced with each age grid time in turn (to generate the actual age grid filenames).
 age_grid_filenames_format = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF/Muller2019-Young2019-Cao2020_AgeGrid-{:.0f}.nc'
 
 # ------------------------------------------
 # END USER INPUT
 # ------------------------------------------
+
 
 # check if the base output directory exists. If it doesn't, create it.
 if not os.path.exists(output_base_dir + '/' + sediment_output_sub_dir):

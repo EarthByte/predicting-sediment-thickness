@@ -11,17 +11,19 @@ Requirements & Inputs:
     - Python scripts: ocean_basin_proximity.py, 
     - GMT 5 (or later)
     - Files associated with a tectonic model: agegrids, rotation file, plate boundaries, topologies
+    - PlateTectonicTools
+    - pyGPlates
 
 Outputs:
-    - directory named 'distances_1d', with mean distance grids (in metres) through time.
+    - directory named 'distances_0.1d', with mean distance grids (in metres) through time.
 
 2020-02-14: Added comments, removed hardcoded names (for rotation file, etc) from definitions
 2022-08-29: Added more comments (NW)
+2024-02:    Improved running time and memory usage.
 """
 
-# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # ------------------------------------------
-# --- Set paths and various parameters
+# BEGIN USER INPUT
 # ------------------------------------------
 
 # Use all CPUs.
@@ -40,10 +42,8 @@ use_all_cpus = 4
 #max_memory_usage_in_gb = None
 max_memory_usage_in_gb = 16
 
+# Base output directory.
 output_base_dir = '.'
-
-# ------------------------------------------
-# --- set times and spacing
 
 # Generate distance grids for times in the range [min_time, max_time] at 'time_step' intervals.
 min_time = 0
@@ -74,8 +74,10 @@ grid_spacing = 0.1
 #       automatically position them correctly in our reference frame.
 anchor_plate_id = 0
 
-# ------------------------------------------
-# --- input files
+# Passive margin files (that distances are calculated relative to).
+#
+# Note: These can be passive margins generated from *contoured* continents (see https://github.com/EarthByte/continent-contouring).
+#       Ensure that the same rotation model is used for contouring (as is used in this workflow).
 proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
 ]
@@ -84,25 +86,26 @@ proximity_features_files = [
 # If not specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
 # Obstacles can be both polygons and polylines.
 #
+# Note: These can be *contoured* continents(see https://github.com/EarthByte/continent-contouring).
+#       Ensure that the same rotation model is used for contouring (as is used in this workflow).
+#
 #continent_obstacle_files = None
 continent_obstacle_files = [
     '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/Coastlines/Global_EarthByte_GPlates_PresentDay_Coastlines.gpmlz',
 ]
 
-# --- location of gplates files on your computer
-# --- agegrids. Can be found here: https://www.earthbyte.org/gplates-2-3-software-and-data-sets/
+# Age grid files.
 #
-#     The format string to generate age grid filenames (using the age grid paleo times in the range [min_time, max_time]).
-#     Use a string section like "{:.1f}" to for the age grid paleo time. The ".1f" part means use the paleo time to one decimal place
-#     (see Python\'s str.format() function) such that a time of 100 would be substituted as "100.0".
-#     This string section will get replaced with each age grid time in turn (to generate the actual age grid filenames).
+# The format string to generate age grid filenames (using the age grid paleo times in the range [min_time, max_time]).
+# Use a string section like "{:.1f}" to for the age grid paleo time. The ".1f" part means use the paleo time to one decimal place
+# (see Python\'s str.format() function) such that a time of 100 would be substituted as "100.0".
+# This string section will get replaced with each age grid time in turn (to generate the actual age grid filenames).
 age_grid_filenames_format = '/Users/nickywright/Data/Age/Muller2019-Young2019-Cao2020_Agegrids/Muller2019-Young2019-Cao2020_netCDF/Muller2019-Young2019-Cao2020_AgeGrid-{:.0f}.nc'
 
-# --- topologies and other files
+# Topology and rotation files.
 data_dir = '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/'
 rotation_filenames = [
     '{}/Rotations/Muller2019-Young2019-Cao2020_CombinedRotations.rot'.format(data_dir)]
-
 topology_filenames = [
     '{}/DynamicPolygons/Muller2019-Young2019-Cao2020_PlateBoundaries.gpmlz'.format(data_dir),
     '{}/DeformingLithosphere/Muller2019-Young2019-Cao2020_ActiveDeformation.gpmlz'.format(data_dir)]
@@ -117,11 +120,13 @@ max_topological_reconstruction_time = 250  # can be None to just use age grid as
 #clamp_mean_proximity_kms = None
 clamp_mean_proximity_kms = 3000
 
+# Output directory name.
 output_dir = '{}/distances_{}d'.format(output_base_dir, grid_spacing)
 
 # ------------------------------------------
 # END USER INPUT
 # ------------------------------------------
+
 
 # -----
 # make needed directories
