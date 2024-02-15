@@ -270,5 +270,5 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     
-    tprof_end = time_prof.perf_counter()
-    print(f"Total time: {tprof_end - tprof_start:.2f} seconds")
+    #tprof_end = time_prof.perf_counter()
+    #print(f"Total time: {tprof_end - tprof_start:.2f} seconds")
