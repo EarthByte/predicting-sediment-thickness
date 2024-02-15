@@ -1,5 +1,9 @@
 
-from ptt.utils.call_system_command import call_system_command
+# Try importing 'ptt' first. If that fails then try 'gplately.ptt' (GPlately now contains PlateTectonicTools).
+try:
+    from ptt.utils.call_system_command import call_system_command
+except ImportError:
+    from gplately.ptt.utils.call_system_command import call_system_command
 import multiprocessing
 import os, shutil
 import sys

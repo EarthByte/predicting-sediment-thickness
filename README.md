@@ -9,7 +9,7 @@ To generate sediment thickness and rate grids through time, all that is required
 You'll also need to install the following Python dependencies:
 * [Generic Mapping Tools (GMT) ](https://www.generic-mapping-tools.org/)
 * [numpy](https://numpy.org/)
-* [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools)
+* [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools), or [GPlately](https://github.com/GPlates/gplately) (which now contains PlateTectonicTools).
 * And, on Windows platforms, optionally install [psutil](https://pypi.org/project/psutil/) so that this workflow can use CPU cores in the *background* (ie, below-normal priority).
 
 
@@ -40,7 +40,7 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 - Open the `01_generate_distance_grids.py` script and:
     + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate distance grids.
     + Set the `age_grid_filenames_format` variable to the location/filenames of the downloaded age grids.
-      + Note: This is a format string that includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
+      + Note: This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
     + Set the `data_dir` variable to the location of all your topological files.
     + Set the `rotation_filenames` and `topology_filenames` variables to match those in the `data_dir`.
     + Set the `max_topological_reconstruction_time` variable to oldest age supported by the topological model (eg, 250, 410, or 1000).
@@ -69,7 +69,7 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 - Open the `02_generate_predicted_sedimentation_grids.py` script and:
     + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate sedimentation grids.
     + Set the `age_grid_filenames_format` variable to the location/filenames of the downloaded age grids.
-      + Note: This is a format string that includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
+      + Note: This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
     + Set the `distance_grid_spacing` variable to equal the `grid_spacing` variable used to generate the distance grids in part 1.
     + Set the `grid_spacing` variable to your desired spacing in degrees (of the output sedimentation grids).
     + Set the `use_all_cpus` variable to the number of CPU cores to use (eg, False, True or a specific number).

@@ -24,13 +24,19 @@
 
 
 import argparse
-from ptt.utils.call_system_command import call_system_command
 import math
 import multiprocessing
 import numpy as np
 import os
-import ptt.utils.points_in_polygons as points_in_polygons
-import ptt.utils.proximity_query as proximity_query
+# Try importing 'ptt' first. If that fails then try 'gplately.ptt' (GPlately now contains PlateTectonicTools).
+try:
+    from ptt.utils.call_system_command import call_system_command
+    import ptt.utils.points_in_polygons as points_in_polygons
+    import ptt.utils.proximity_query as proximity_query
+except ImportError:
+    from gplately.ptt.utils.call_system_command import call_system_command
+    import gplately.ptt.utils.points_in_polygons as points_in_polygons
+    import gplately.ptt.utils.proximity_query as proximity_query
 import pygplates
 import shortest_path
 import sys
