@@ -157,19 +157,17 @@ def write_xyz_file(output_filename, output_data):
 
 def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes):
     
-    # The command-line strings to execute GMT 'nearneighbor'.
-    # For example "nearneighbor output_mean_distance.xy -R-180/180/-90/90 -I1 -N4 -S1d -Goutput_mean_distance.nc".
+    # The command-line strings to execute GMT 'xyz2grd'.
+    # For example "xyz2grd output_sediment_thickness.xy -R-180/180/-90/90 -I1 -Goutput_sediment_thickness.nc".
     gmt_command_line = [
             "gmt",
-            "nearneighbor",
+            "xyz2grd",
             xyz_filename,
-            "-N4",
-            "-S{0}d".format(1.5 * grid_spacing),
             "-I{0}".format(grid_spacing),
-            "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
             # Use GMT gridline registration since our input point grid has data points on the grid lines.
             # Gridline registration is the default so we don't need to force pixel registration...
-            #"-r", # Force pixel registration since data points are at centre of cells.
+            # "-r", # Force pixel registration since data points are at centre of cells.
+            "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
             "-G{0}".format(grd_filename)]
     call_system_command(gmt_command_line)
 
