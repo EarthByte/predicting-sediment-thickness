@@ -111,7 +111,7 @@ topology_filenames = [
 # (each ocean point is reconstructed back to its age grid value or this value, whichever is smaller).
 # This limit can be set to the earliest (max) reconstruction time of the topological model.
 # If it's 'None' then only the age grid limits how far back each point is reconstructed.
-max_topological_reconstruction_time = 1000  # can be None to just use age grid as the limit
+max_topological_reconstruction_time = 250  # can be None to just use age grid as the limit
 
 # Optionally clamp mean distances to this value (in kms).
 #clamp_mean_proximity_kms = None
