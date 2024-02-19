@@ -38,9 +38,9 @@ except ImportError:
     import gplately.ptt.utils.points_in_polygons as points_in_polygons
     import gplately.ptt.utils.proximity_query as proximity_query
 import pygplates
+from scipy.spatial import KDTree
 import shortest_path
 import sys
-import tempfile
 import time as time_profile
 
 
@@ -182,8 +182,101 @@ class CpuProfile(object):
         if self.enable_profiling:
             self.time_usage_topology_reconstruct_time_step_stage_rotations += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_stage_rotations
     
-    def print_proximity_usage(self, age_grid_paleo_times):
-        """Call at the end of proximity() to print its CPU usage."""
+
+    def start_write_proximity_data(self):
+        """Call at the start of write_proximity_data()."""
+        if self.enable_profiling:
+            self.time_snapshot_start_write_proximity_data = self.profile()
+
+            self.time_usage_write_proximity_data = 0.0
+            self.time_usage_write_xyz_file = 0.0
+            self.time_usage_write_grd_file_from_xyz = 0.0
+            self.time_usage_upscaled_mask_generate_input_points = 0.0
+            self.time_usage_calculate_upscaled_mask_and_weights = 0.0
+            self.time_usage_upscaled_sample_age_grid = 0.0
+            self.time_usage_convert_upscale_mask_samples_to_cartesian = 0.0
+            self.time_usage_create_and_query_kdtrees = 0.0
+            self.time_usage_calc_interpolation_weights = 0.0
+            self.time_usage_write_upscaled_grd_file = 0.0
+            self.time_usage_calc_upscaled_scalars = 0.0
+    def end_write_proximity_data(self):
+        """Call at the end of write_proximity_data()."""
+        if self.enable_profiling:
+            self.time_usage_write_proximity_data += self.profile() - self.time_snapshot_start_write_proximity_data
+    
+    def start_write_xyz_file(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_write_xyz_file = self.profile()
+    def end_write_xyz_file(self):
+        if self.enable_profiling:
+            self.time_usage_write_xyz_file += self.profile() - self.time_snapshot_start_write_xyz_file
+    
+    def start_write_grd_file_from_xyz(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_write_grd_file_from_xyz = self.profile()
+    def end_write_grd_file_from_xyz(self):
+        if self.enable_profiling:
+            self.time_usage_write_grd_file_from_xyz += self.profile() - self.time_snapshot_start_write_grd_file_from_xyz
+    
+    def start_upscaled_mask_generate_input_points(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_upscaled_mask_generate_input_points = self.profile()
+    def end_upscaled_mask_generate_input_points(self):
+        if self.enable_profiling:
+            self.time_usage_upscaled_mask_generate_input_points += self.profile() - self.time_snapshot_start_upscaled_mask_generate_input_points
+    
+    def start_calculate_upscaled_mask_and_weights(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_calculate_upscaled_mask_and_weights = self.profile()
+    def end_calculate_upscaled_mask_and_weights(self):
+        if self.enable_profiling:
+            self.time_usage_calculate_upscaled_mask_and_weights += self.profile() - self.time_snapshot_start_calculate_upscaled_mask_and_weights
+    
+    def start_upscaled_sample_age_grid(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_upscaled_sample_age_grid = self.profile()
+    def end_upscaled_sample_age_grid(self):
+        if self.enable_profiling:
+            self.time_usage_upscaled_sample_age_grid += self.profile() - self.time_snapshot_start_upscaled_sample_age_grid
+    
+    def start_convert_upscale_mask_samples_to_cartesian(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_convert_upscale_mask_samples_to_cartesian = self.profile()
+    def end_convert_upscale_mask_samples_to_cartesian(self):
+        if self.enable_profiling:
+            self.time_usage_convert_upscale_mask_samples_to_cartesian += self.profile() - self.time_snapshot_start_convert_upscale_mask_samples_to_cartesian
+    
+    def start_create_and_query_kdtrees(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_create_and_query_kdtrees = self.profile()
+    def end_create_and_query_kdtrees(self):
+        if self.enable_profiling:
+            self.time_usage_create_and_query_kdtrees += self.profile() - self.time_snapshot_start_create_and_query_kdtrees
+    
+    def start_calc_interpolation_weights(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_calc_interpolation_weights = self.profile()
+    def end_calc_interpolation_weights(self):
+        if self.enable_profiling:
+            self.time_usage_calc_interpolation_weights += self.profile() - self.time_snapshot_start_calc_interpolation_weights
+    
+    def start_write_upscaled_grd_file(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_write_upscaled_grd_file = self.profile()
+    def end_write_upscaled_grd_file(self):
+        if self.enable_profiling:
+            self.time_usage_write_upscaled_grd_file += self.profile() - self.time_snapshot_start_write_upscaled_grd_file
+    
+    def start_calc_upscaled_scalars(self):
+        if self.enable_profiling:
+            self.time_snapshot_start_calc_upscaled_scalars = self.profile()
+    def end_calc_upscaled_scalars(self):
+        if self.enable_profiling:
+            self.time_usage_calc_upscaled_scalars += self.profile() - self.time_snapshot_start_calc_upscaled_scalars
+    
+
+    def print_usage(self, age_grid_paleo_times):
+        """Call to print CPU usage."""
         if self.enable_profiling:
             scale_to_seconds = 1e-9  # convert nanoseconds to seconds
             print( "proximity() CPU usage:")
@@ -203,6 +296,17 @@ class CpuProfile(object):
             print(f"            Topology reconstruct time step (deactivate): {self.time_usage_topology_reconstruct_time_step_deactivate * scale_to_seconds:.2f} seconds")
             print(f"            Topology reconstruct time step (points in polygons): {self.time_usage_topology_reconstruct_time_step_find_polygons * scale_to_seconds:.2f} seconds")
             print(f"            Topology reconstruct time step (stage rotations): {self.time_usage_topology_reconstruct_time_step_stage_rotations * scale_to_seconds:.2f} seconds")
+            print(f"    WriteProximityData: {self.time_usage_write_proximity_data * scale_to_seconds:.2f} seconds")
+            print(f"      Write xyz file: {self.time_usage_write_xyz_file * scale_to_seconds:.2f} seconds")
+            print(f"      Write grd file from xyz: {self.time_usage_write_grd_file_from_xyz * scale_to_seconds:.2f} seconds")
+            print(f"      Generate upscaled mask input points: {self.time_usage_upscaled_mask_generate_input_points * scale_to_seconds:.2f} seconds")
+            print(f"      Get upscaled mask (from age grid) and weights: {self.time_usage_calculate_upscaled_mask_and_weights * scale_to_seconds:.2f} seconds")
+            print(f"        Sample age grid at upscaled grid spacing: {self.time_usage_upscaled_sample_age_grid * scale_to_seconds:.2f} seconds")
+            print(f"        Convert upscaled mask samples to cartesian: {self.time_usage_convert_upscale_mask_samples_to_cartesian * scale_to_seconds:.2f} seconds")
+            print(f"        Create and query k-d trees: {self.time_usage_create_and_query_kdtrees * scale_to_seconds:.2f} seconds")
+            print(f"        Calculate interpolation weights: {self.time_usage_calc_interpolation_weights * scale_to_seconds:.2f} seconds")
+            print(f"      Write upscaled grd file: {self.time_usage_write_upscaled_grd_file * scale_to_seconds:.2f} seconds")
+            print(f"        Calculate upscaled scalars: {self.time_usage_calc_upscaled_scalars * scale_to_seconds:.2f} seconds")
     
     @staticmethod
     def profile():
@@ -326,16 +430,11 @@ def generate_input_points_grid(grid_spacing_degrees):
     num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
     num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
 
-    input_points = np.full((num_latitudes * num_longitudes, 2), (0.0, 0.0), dtype=float)  # numpy array uses less memory
-    input_point_index = 0
-    for lat_index in range(num_latitudes):
-        lat = -90 + lat_index * grid_spacing_degrees
-        
-        for lon_index in range(num_longitudes):
-            lon = -180 + lon_index * grid_spacing_degrees
-            
-            input_points[input_point_index] = (lon, lat)
-            input_point_index += 1
+    # Generate the input points on the grid.
+    input_points_mesh_grid = np.meshgrid(
+            np.linspace(-180, 180, num_longitudes),
+            np.linspace(-90, 90, num_latitudes))
+    input_points = np.array(input_points_mesh_grid).reshape(2, -1).T
 
     # num_latitudes = int(math.floor(180.0 / grid_spacing_degrees))
     # num_longitudes = int(math.floor(360.0 / grid_spacing_degrees))
@@ -520,12 +619,17 @@ def topology_reconstruct_time_step(
 
 
 def write_xyz_file(output_filename, output_data):
+    cpu_profile.start_write_xyz_file()
+
     with open(output_filename, 'w') as output_file:
         for output_line in output_data:
             output_file.write(' '.join(str(item) for item in output_line) + '\n')
+    
+    cpu_profile.end_write_xyz_file()
 
 
 def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearneighbor = True):
+    cpu_profile.start_write_grd_file_from_xyz()
     
     if use_nearneighbor:
         # The command-line strings to execute GMT 'nearneighbor'.
@@ -558,33 +662,138 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearne
     
     call_system_command(gmt_command_line)
 
+    cpu_profile.end_write_grd_file_from_xyz()
 
-def get_upscaled_mask_grd_file(upscaled_grid_spacing, age_grid_filename):
-    
-    #tprof_start = time_profile.perf_counter()
 
-    # Temporary upscaled mask grid file.
-    upscaled_mask_grd_file = tempfile.NamedTemporaryFile(delete=True)
-    upscaled_mask_grd_file.close()  # cannot open twice on Windows - close before opening again
+def calculate_upscaled_mask_and_weights(src_lon_lats, src_grid_spacing, upscaled_lon_lats_string, age_grid_filename):
+    cpu_profile.start_calculate_upscaled_mask_and_weights()
+    cpu_profile.start_upscaled_sample_age_grid()
 
-    #tprof_upscaled_input_points_start = time_profile.perf_counter()
-
-    # Generate input points at the upscaled grid spacing.
-    upscaled_input_points, _, _ = generate_input_points_grid(upscaled_grid_spacing)
-    upscaled_input_points_data = ''.join('{} {}\n'.format(lon, lat) for lon, lat in upscaled_input_points)
-
-    #tprof_upscaled_input_points_end = time_profile.perf_counter()
-    #print(f"  generate upscaled input points: {tprof_upscaled_input_points_end - tprof_upscaled_input_points_start:.2f} seconds")
-    #tprof_upscaled_mask_data_start = time_profile.perf_counter()
-
+    # Create a mask (matching age grid mask) at our upscaled grid spacing.
+    #
     # Sample age grid at the upscaled grid spacing.
-    upscaled_mask_data = call_system_command(
+    # The "-s" option suppresses output of NaN values.
+    upscaled_masked_lon_lat_ages_string = call_system_command(
             # The command-line strings to execute GMT 'grdtrack'...
-            ["gmt", "grdtrack", "-fg", "-G{}".format(age_grid_filename)],
-            stdin=upscaled_input_points_data,
+            ["gmt", "grdtrack", "-fg", "-s", "-G{}".format(age_grid_filename)],
+            stdin=upscaled_lon_lats_string,
             return_stdout=True)
+    #memory_profile.print_object_memory_usage(upscaled_masked_lon_lat_ages_string, 'upscaled_masked_lon_lat_ages_string')
+    
+    cpu_profile.end_upscaled_sample_age_grid()
+    cpu_profile.start_convert_upscale_mask_samples_to_cartesian()
 
-    # Write age grid (at upscaled grid spacing) to the upscaled mask grid file.
+    # Extract the age-grid-masked input points (as xyz cartesian coordinates).
+    upscaled_masked_lon_lat_ages_lines = upscaled_masked_lon_lat_ages_string.splitlines()
+    del upscaled_masked_lon_lat_ages_string  # free memory
+    upscaled_masked_lon_lats = np.empty((len(upscaled_masked_lon_lat_ages_lines), 2), dtype=float)
+    upscaled_masked_cartesians = np.empty((len(upscaled_masked_lon_lat_ages_lines), 3), dtype=float)
+    for line_index, line in enumerate(upscaled_masked_lon_lat_ages_lines):
+        # Each line returned by GMT grdtrack contains "longitude latitude age_grid_value".
+        # Note that due to "-s" option to "gmt grdtrack" we will only get non-NaN age grid values.
+        lon_str, lat_str, _ = line.split()
+        lon, lat = float(lon_str), float(lat_str)
+        upscaled_masked_lon_lats[line_index] = (lon, lat)
+        upscaled_masked_cartesians[line_index] = pygplates.PointOnSphere(lat, lon).to_xyz()  # (x,y,z) tuple
+    del upscaled_masked_lon_lat_ages_lines  # free memory
+    #memory_profile.print_object_memory_usage(upscaled_masked_lon_lats, 'upscaled_masked_lon_lats')
+    #memory_profile.print_object_memory_usage(upscaled_masked_cartesians, 'upscaled_masked_cartesians')
+    
+    cpu_profile.end_convert_upscale_mask_samples_to_cartesian()
+    cpu_profile.start_create_and_query_kdtrees()
+
+    # Create a k-d tree of the upscaled points.
+    upscaled_masked_kdtree = KDTree(upscaled_masked_cartesians)
+    #memory_profile.print_object_memory_usage(upscaled_masked_kdtree, 'upscaled_masked_kdtree')
+
+    # Create a k-d tree of the source points.
+    src_cartesians = np.empty((len(src_lon_lats), 3), dtype=float)
+    for src_index, (src_lon, src_lat) in enumerate(src_lon_lats):
+        src_cartesians[src_index] = pygplates.PointOnSphere(src_lat, src_lon).to_xyz()  # (x,y,z) tuple
+    src_kdtree = KDTree(src_cartesians)
+
+    # For each upscaled point search within a radius around it for source points.
+    search_radius = 1.5 * np.deg2rad(src_grid_spacing)
+    upscaled_indices = upscaled_masked_kdtree.query_ball_tree(src_kdtree, search_radius)
+    #memory_profile.print_object_memory_usage(upscaled_indices, 'upscaled_indices')
+
+    cpu_profile.end_create_and_query_kdtrees()
+    cpu_profile.start_calc_interpolation_weights()
+
+    upscaled_masked_valid_weights = []
+    upscaled_masked_valid_lon_lats = np.empty((len(upscaled_indices), 2), dtype=float)
+    valid_index = 0
+    # The search radius used in the distance weighting (slightly larger to avoid negative values - see 'src_weights' below).
+    max_radius_for_weight = (1 + 1e-4) * search_radius
+    for upscaled_point_index, src_indices in enumerate(upscaled_indices):
+        if not src_indices:
+            continue
+
+        src_indices = np.array(src_indices, dtype=int)  # numpy array uses less memory
+
+        upscaled_cartesian = upscaled_masked_cartesians[upscaled_point_index]
+
+        src_distances = np.empty(src_indices.size, dtype=float)  # use same array for distances (first) and weights (second)
+        for index, src_index in enumerate(src_indices):
+            # Distance from upscaled point to its current near neighbour.
+            src_distance = np.sqrt(np.sum((upscaled_cartesian - src_cartesians[src_index]) ** 2))
+            # If near neighbour coincides with upscaled point then give it the full weighting (and with other neighbours getting zero weighting).
+            # Also avoids divide by zero.
+            if src_distance < 1e-6:
+                # The 'src_distances' array now becomes the 'src_weights' array.
+                src_weights = src_distances
+                src_weights[:] = 0.0
+                src_weights[index] = 1.0
+                break
+            src_distances[index] = src_distance
+        else:
+            # Calculate the source weights based on distance.
+            # For the weight equation see https://en.wikipedia.org/wiki/Inverse_distance_weighting#Modified_Shepard's_method
+            #
+            # Note: The expression (max_radius_for_weight - src_distances) cannot be negative since 'max_radius_for_weight' is
+            #       slightly larger than the maximum src distance (which is 'search_radius').
+            #
+            # Note: The 'src_distances' array now becomes the 'src_weights' array.
+            src_weights = (max_radius_for_weight - src_distances) / (max_radius_for_weight * src_distances)
+            src_weights = src_weights * src_weights  # square
+            src_weights /= np.sum(src_weights)  # normalise
+
+        upscaled_masked_valid_weights.append((src_indices, src_weights))
+        upscaled_masked_valid_lon_lats[valid_index] = upscaled_masked_lon_lats[upscaled_point_index]
+        valid_index += 1
+    
+    # Resize the number of upscaled points since some might not be near any source points (and hence got excluded).
+    upscaled_masked_valid_lon_lats = upscaled_masked_valid_lon_lats[:valid_index]
+    #print('num indices', sum(len(l1) for l1, l2 in upscaled_masked_valid_weights))
+
+    #memory_profile.print_object_memory_usage(upscaled_masked_valid_lon_lats, 'upscaled_masked_valid_lon_lats')
+    #memory_profile.print_object_memory_usage(upscaled_masked_valid_weights, 'upscaled_masked_valid_weights')
+
+    cpu_profile.end_calc_interpolation_weights()
+    cpu_profile.end_calculate_upscaled_mask_and_weights()
+
+    return upscaled_masked_valid_lon_lats, upscaled_masked_valid_weights
+
+
+def write_upscaled_grd_file(grd_filename, scalars, upscaled_lon_lats, upscaled_interpolation_weights, upscaled_grid_spacing):
+    cpu_profile.start_write_upscaled_grd_file()
+    cpu_profile.start_calc_upscaled_scalars()
+
+    # Calculate the upscaled scalars using the upscaled interpolation weights.
+    upscaled_lon_lat_scalars = np.empty((len(upscaled_lon_lats), 3), dtype=float)
+    for upscaled_point_index, (upscaled_lon, upscaled_lat) in enumerate(upscaled_lon_lats):
+        scalar_indices, scalar_weights = upscaled_interpolation_weights[upscaled_point_index]
+        upscaled_scalar = np.sum(scalars[scalar_indices] * scalar_weights)
+        upscaled_lon_lat_scalars[upscaled_point_index] = (upscaled_lon, upscaled_lat, upscaled_scalar)
+    #memory_profile.print_object_memory_usage(upscaled_lon_lat_scalars, 'upscaled_lon_lat_scalars')
+
+    cpu_profile.end_calc_upscaled_scalars()
+
+    # Convert array to a string for standard-input to GMT.
+    upscaled_xyz_data = ''.join('{} {} {}\n'.format(lon, lat, scalar) for lon, lat, scalar in upscaled_lon_lat_scalars)
+    #memory_profile.print_object_memory_usage(upscaled_xyz_data, 'upscaled_xyz_data')
+
+    # The command-line strings to execute GMT 'xyz2grd'.
     call_system_command([
             "gmt",
             "xyz2grd",
@@ -593,58 +802,10 @@ def get_upscaled_mask_grd_file(upscaled_grid_spacing, age_grid_filename):
             # Gridline registration is the default so we don't need to force pixel registration...
             # "-r", # Force pixel registration since data points are at centre of cells.
             "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
-            "-G{}".format(upscaled_mask_grd_file.name)],
-            stdin=upscaled_mask_data)
+            "-G{}".format(grd_filename)],
+            stdin=upscaled_xyz_data)
     
-    #tprof_upscaled_mask_data_end = time_profile.perf_counter()
-    #print(f"  create mask: {tprof_upscaled_mask_data_end - tprof_upscaled_mask_data_start:.2f} seconds")
-    #tprof_end = time_profile.perf_counter()
-    #print(f"get_upscaled_mask_grd_file: {tprof_end - tprof_start:.2f} seconds")
-
-    return upscaled_mask_grd_file
-
-
-def write_upscaled_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, upscaled_grid_spacing, upscaled_mask_grd_filename):
-    
-    #tprof_start = time_profile.perf_counter()
-
-    # Temporary upscaled unmasked grid file.
-    upscaled_unmasked_grd_file = tempfile.NamedTemporaryFile(delete=True)
-    upscaled_unmasked_grd_file.close()  # cannot open twice on Windows - close before opening again
-
-    try:
-        #tprof_upscaled_unmasked_grid_start = time_profile.perf_counter()
-
-        # Write the unmasked grid at the upscaled grid spacing.
-        call_system_command([
-                "gmt",
-                "nearneighbor",
-                xyz_filename,
-                "-N8+m1", # Only require a single sample.
-                "-S{}d".format(2 * grid_spacing),
-                "-I{}".format(upscaled_grid_spacing),
-                # Use GMT gridline registration since our input point grid has data points on the grid lines.
-                # Gridline registration is the default so we don't need to force pixel registration...
-                #"-r", # Force pixel registration since data points are at centre of cells.
-                "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
-                "-G{}".format(upscaled_unmasked_grd_file.name)])
-        
-        #tprof_upscaled_unmasked_grid_end = time_profile.perf_counter()
-        #print(f"  nearneighbor: {tprof_upscaled_unmasked_grid_end - tprof_upscaled_unmasked_grid_start:.2f} seconds")
-        #tprof_upscaled_masked_grid_start = time_profile.perf_counter()
-
-        # Since we used 'nearneighbour' above, it expanded outside the age grid mask.
-        # So here we remove any grid values outside the age grid mask (using "OR" operator only looks at whether age grid has NaN values or not).
-        call_system_command(["gmt", "grdmath", "-fg", upscaled_unmasked_grd_file.name, upscaled_mask_grd_filename, "OR", "=", grd_filename])
-
-        #tprof_upscaled_masked_grid_end = time_profile.perf_counter()
-        #print(f"  grdmath: {tprof_upscaled_masked_grid_end - tprof_upscaled_masked_grid_start:.2f} seconds")
-    
-    finally:
-        os.unlink(upscaled_unmasked_grd_file.name)  # remove temp file (because we set 'delete=False')
-    
-    #tprof_end = time_profile.perf_counter()
-    #print(f"write_upscaled_grd_file_from_xyz: {tprof_end - tprof_start:.2f} seconds")
+    cpu_profile.end_write_upscaled_grd_file()
 
 
 # Class to hold all proximity data for a specific age grid paleo time.
@@ -662,9 +823,14 @@ class ProximityData(object):
 
         # Accumulate proximity statistics for each ocean basin point over time.
         if self.output_mean_proximity or self.output_standard_deviation_proximity:
-            # Statistics to calculate mean/std-dev for a single ocean basin point.
+            # Statistics to calculate mean/standard-deviation for a single ocean basin point.
             # Each ocean basin point has (num_proximities, sum_proximities, sum_square_proximities) that start at zero.
-            self.point_statistics = np.full((len(self.point_lons), 3), (0, 0.0, 0.0), dtype=float)  # numpy array uses less memory
+            num_points = len(self.point_lons)
+            self.num_proximities = np.zeros(num_points, dtype=float)  # numpy array uses less memory
+            self.sum_proximities = np.zeros(num_points, dtype=float)  # numpy array uses less memory
+            self.sum_square_proximities = np.zeros(num_points, dtype=float)  # numpy array uses less memory
+            # Not all ocean basin points will necessarily have statistics (because they might have been deactivated immediately).
+            self.valid_point_statistics = np.full(num_points, False, dtype=bool)  # numpy array uses less memory
         
         # Keep a record of all proximity over time.
         if self.output_proximity_with_time:
@@ -673,17 +839,17 @@ class ProximityData(object):
     def add_proximity(self, proximity_in_kms, time, ocean_basin_point_index, ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat):
         # Update the proximity statistics for the current ocean basin point.
         if self.output_mean_proximity or self.output_standard_deviation_proximity:
-            num_proximities, sum_proximities, sum_square_proximities = self.point_statistics[ocean_basin_point_index]
-            num_proximities += 1
-            sum_proximities += proximity_in_kms
-            sum_square_proximities += proximity_in_kms * proximity_in_kms
-            self.point_statistics[ocean_basin_point_index] = (num_proximities, sum_proximities, sum_square_proximities)
+            self.valid_point_statistics[ocean_basin_point_index] = True
+            self.num_proximities[ocean_basin_point_index] += 1
+            self.sum_proximities[ocean_basin_point_index] += proximity_in_kms
+            self.sum_square_proximities[ocean_basin_point_index] += proximity_in_kms * proximity_in_kms
         
         # Add proximity for the current reconstructed point to a list for the reconstruction time.
         if self.output_proximity_with_time:
             # If we haven't already, create a new array of (reconstructed_lon, reconstructed_lat, proximity_in_kms) for all points at the specified time.
             if time not in self.time_datas:
-                self.time_datas[time] = np.full((len(self.point_lons), 3), (0.0, 0.0, 0.0), dtype=float)  # numpy array uses less memory
+                # All points at the current 'time' are invalid unless they are assigned to.
+                self.time_datas[time] = np.ma.masked_all((len(self.point_lons), 3), dtype=float)  # numpy array uses less memory
             # Store the data for the current ocean point.
             self.time_datas[time][ocean_basin_point_index] = (ocean_basin_reconstructed_lon, ocean_basin_reconstructed_lat, proximity_in_kms)
     
@@ -695,59 +861,53 @@ class ProximityData(object):
     # Actually each tuple is an array of length 3 containing (reconstructed_lon, reconstructed_lat, proximity_in_kms).
     def get_time_data(self, time):
         if self.output_proximity_with_time:
-            return self.time_datas[time]  # raises KeyError if time not in dict
+            # Return time data but remove any masked entries (where points were not added).
+            return self.time_datas[time].compressed().reshape(-1, 3)  # raises KeyError if time not in dict
         else:
             return []
     
-    # Return list of mean statistics (over time) tuples.
-    # Each tuple is (lon, lat, mean).
-    def get_mean_data(self):
+    # Return array of (lon, lat) points that have mean/standard-deviation statistics.
+    # These are ocean basin points that have not been deactivated immediately.
+    # Each tuple is (lon, lat).
+    def get_mean_standard_deviation_lon_lats(self):
+        return np.column_stack((
+                self.point_lons[self.valid_point_statistics],
+                self.point_lats[self.valid_point_statistics]))
+    
+    # Return array of means (over time).
+    # Each array element is a single mean.
+    # The order and number of elements is same as 'get_mean_standard_deviation_lon_lats()'.
+    def get_means(self):
         if self.output_mean_proximity:
-            # Calculate a mean proximity over time for each ocean basin point.
-            mean_data = []
-            for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
-                # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
-                if num_proximities > 0:
-                    mean_proximity = sum_proximities / num_proximities
+            valid_stats_mask = self.valid_point_statistics
 
-                    # Clamp mean proximity if requested.
-                    if (self.clamp_mean_proximity_in_kms is not None and
-                        mean_proximity > self.clamp_mean_proximity_in_kms):
-                        mean_proximity = self.clamp_mean_proximity_in_kms
+            # Calculate a mean proximity over time for each ocean basin point (that has statistics).
+            mean_proximity = self.sum_proximities[valid_stats_mask] / self.num_proximities[valid_stats_mask]
 
-                    ocean_basin_lon = self.point_lons[point_index]
-                    ocean_basin_lat = self.point_lats[point_index]
-
-                    mean_data.append((ocean_basin_lon, ocean_basin_lat, mean_proximity))
-
-            return mean_data
+            # Clamp mean proximity if requested.
+            if self.clamp_mean_proximity_in_kms is not None:
+                mean_proximity[mean_proximity > self.clamp_mean_proximity_in_kms] = self.clamp_mean_proximity_in_kms
+            
+            return mean_proximity
         else:
             return []
     
-    # Return list of standard deviation statistics (over time) tuples.
-    # Each tuple is (lon, lat, std_dev).
-    def get_std_dev_data(self):
+    # Return array of standard deviations (over time).
+    # Each array element is a single standard deviation.
+    # The order and number of elements is same as 'get_mean_standard_deviation_lon_lats()'.
+    def get_standard_deviations(self):
         if self.output_standard_deviation_proximity:
-            # Calculate a standard deviation proximity over time for each ocean basin point.
-            std_dev_data = []
-            for point_index, (num_proximities, sum_proximities, sum_square_proximities) in enumerate(self.point_statistics):
-                # Only add current point if it didn't get deactivated immediately (and hence has no statistics).
-                if num_proximities > 0:
-                    mean_proximity = sum_proximities / num_proximities
-                
-                    standard_deviation_proximity_squared = (sum_square_proximities / num_proximities) - (mean_proximity * mean_proximity)
-                    # Ensure not negative due to numerical precision.
-                    if standard_deviation_proximity_squared > 0:
-                        standard_deviation_proximity = math.sqrt(standard_deviation_proximity_squared)
-                    else:
-                        standard_deviation_proximity = 0
-                        
-                        ocean_basin_lon = self.point_lons[point_index]
-                        ocean_basin_lat = self.point_lats[point_index]
-                    
-                    std_dev_data.append((ocean_basin_lon, ocean_basin_lat, standard_deviation_proximity))
+            valid_stats_mask = self.valid_point_statistics
 
-            return std_dev_data
+            # Calculate a standard deviation proximity over time for each ocean basin point.
+            mean_proximity = self.sum_proximities[valid_stats_mask] / self.num_proximities[valid_stats_mask]
+            standard_deviation_proximity = np.sqrt(
+                    (self.sum_square_proximities[valid_stats_mask] / self.num_proximities[valid_stats_mask]) - (mean_proximity * mean_proximity))
+
+            # Ensure not negative due to numerical precision (ie, sqrt(negative_number)).
+            standard_deviation_proximity[np.isnan(standard_deviation_proximity)] = 0.0
+            
+            return standard_deviation_proximity
         else:
             return []
 
@@ -1145,7 +1305,6 @@ def proximity(
 
     cpu_profile.end_reconstruct_and_calculate_distances()
     cpu_profile.end_proximity()
-    cpu_profile.print_proximity_usage(age_grid_paleo_times)
     
     #memory_profile.print_object_memory_usage(proximity_datas, 'proximity_datas')
     for proximity_data_time in proximity_datas.keys():
@@ -1164,6 +1323,19 @@ def write_proximity_data(
         output_standard_deviation_distance,
         output_grd_files = None):
     
+    cpu_profile.start_write_proximity_data()
+
+    # If we're outputting mean and/or standard deviation grids, and if upscaling has been enabled.
+    if output_grd_files and (output_mean_distance or output_standard_deviation_distance):
+        _, upscale_mean_std_dev_grid_spacing = output_grd_files
+        if upscale_mean_std_dev_grid_spacing is not None:
+            # Generate input points at the upscaled grid spacing.
+            # These will be used to generate an upscaled mask from an age grid.
+            # We do this outside the loop over age grids because it only needs to be done once (for all age grids) and so reduces running time.
+            cpu_profile.start_upscaled_mask_generate_input_points()
+            upscaled_lon_lats, _, _ = generate_input_points_grid(upscale_mean_std_dev_grid_spacing)  # this is quite fast (using numpy)
+            upscaled_lon_lats_string = ''.join('{} {}\n'.format(lon, lat) for lon, lat in upscaled_lon_lats)  # this is quite slow
+            cpu_profile.end_upscaled_mask_generate_input_points()
     
     # Write the distance grid(s) associated with each input age grid.
     for age_grid_filename, age_grid_paleo_time in age_grid_filenames_and_paleo_times:
@@ -1172,15 +1344,6 @@ def write_proximity_data(
         if not proximity_data:
             print('WARNING: All ocean basin points are outside the age grid: {}'.format(age_grid_filename), file=sys.stderr)
             continue
-
-        # Create a temporary mask grid file (matching age grid mask) at our upscaled grid spacing.
-        # We only do this if we're outputting mean/std-dev grids, and if upscaling has been enabled.
-        upscaled_mask_grd_file = None
-        if output_mean_distance or output_standard_deviation_distance:
-            if output_grd_files:
-                _, upscale_mean_std_dev_grid_spacing = output_grd_files
-                if upscale_mean_std_dev_grid_spacing is not None:
-                    upscaled_mask_grd_file = get_upscaled_mask_grd_file(upscale_mean_std_dev_grid_spacing, age_grid_filename)
     
         if output_distance_with_time:
 
@@ -1196,20 +1359,41 @@ def write_proximity_data(
                             grd_filename, xyz_filename, ocean_basin_grid_spacing,
                             # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
                             use_nearneighbor=True)
+
+        # If we're outputting mean and/or standard deviation grids, and if upscaling has been enabled.
+        if output_mean_distance or output_standard_deviation_distance:
+            mean_standard_deviation_lon_lats = proximity_data.get_mean_standard_deviation_lon_lats()
+            # If we're outputting mean and/or standard deviation grids, and if upscaling has been enabled.
+            if output_grd_files:
+                ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
+                if upscale_mean_std_dev_grid_spacing is not None:
+                    upscaled_masked_lon_lats, upscaled_masked_interpolation_weights = calculate_upscaled_mask_and_weights(
+                            mean_standard_deviation_lon_lats,
+                            ocean_basin_grid_spacing,
+                            upscaled_lon_lats_string,
+                            age_grid_filename)
         
         if output_mean_distance:
 
+            means = proximity_data.get_means()
+
+            # Write the xyz file.
             xyz_mean_distance_filename = '{}_{:.1f}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
-            write_xyz_file(xyz_mean_distance_filename, proximity_data.get_mean_data())
+            # An array of (lon, lat, mean).
+            xyz_mean_data = np.column_stack((mean_standard_deviation_lon_lats, means))
+            write_xyz_file(xyz_mean_distance_filename, xyz_mean_data)
             
+            # Write the grid file.
             if output_grd_files:
                 grd_mean_distance_filename = '{}_{:.1f}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
                 ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
                 if upscale_mean_std_dev_grid_spacing is not None:
-                    write_upscaled_grd_file_from_xyz(
-                            grd_mean_distance_filename, xyz_mean_distance_filename,
-                            ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing,
-                            upscaled_mask_grd_file.name)
+                    write_upscaled_grd_file(
+                            grd_mean_distance_filename,
+                            means,
+                            upscaled_masked_lon_lats,
+                            upscaled_masked_interpolation_weights,
+                            upscale_mean_std_dev_grid_spacing)
                 else:
                     write_grd_file_from_xyz(
                             grd_mean_distance_filename, xyz_mean_distance_filename, ocean_basin_grid_spacing,
@@ -1218,28 +1402,34 @@ def write_proximity_data(
         
         if output_standard_deviation_distance:
 
-            xyz_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
-            write_xyz_file(xyz_standard_deviation_distance_filename, proximity_data.get_std_dev_data())
+            standard_deviations = proximity_data.get_standard_deviations()
 
+            # Write the xyz file.
+            xyz_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
+            # An array of (lon, lat, standard_deviation).
+            xyz_standard_deviation_data = np.column_stack((mean_standard_deviation_lon_lats, standard_deviations))
+            write_xyz_file(xyz_standard_deviation_distance_filename, xyz_standard_deviation_data)
+
+            # Write the grid file.
             if output_grd_files:
                 grd_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
                 ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
                 if upscale_mean_std_dev_grid_spacing is not None:
-                    write_upscaled_grd_file_from_xyz(
-                            grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename,
-                            ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing,
-                            upscaled_mask_grd_file.name)
+                    write_upscaled_grd_file(
+                            grd_standard_deviation_distance_filename,
+                            standard_deviations,
+                            upscaled_masked_lon_lats,
+                            upscaled_masked_interpolation_weights,
+                            upscale_mean_std_dev_grid_spacing)
                 else:
                     write_grd_file_from_xyz(
                             grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename, ocean_basin_grid_spacing,
                             # Using original (grid-aligned) points so don't near nearest neighbour filtering...
                             use_nearneighbor=False)
-        
-        # Remove temporary mask grid file (if we created it).
-        if upscaled_mask_grd_file is not None:
-            os.unlink(upscaled_mask_grd_file.name)  # remove temp file (because we set 'delete=False')
     
-    # See how much extra memory is used after time/mean/std-dev data is extracted from the ProximityData.
+    cpu_profile.end_write_proximity_data()
+    
+    # See how much extra memory is used after time/mean/standard-deviation data is extracted from the ProximityData.
     #for proximity_data_time in proximity_datas.keys():
     #    memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}] at end of write_proximity_data()'.format(proximity_data_time))
 
@@ -1265,6 +1455,7 @@ def generate_and_write_proximity_data(
         clamp_mean_proximity_distance_radians = None,
         output_grd_files = None):
     
+    # Calculate proximity data.
     proximity_datas = proximity(
             input_points, # List of (lon, lat) tuples.
             rotation_filenames,
@@ -1283,6 +1474,7 @@ def generate_and_write_proximity_data(
             proximity_distance_threshold_radians,
             clamp_mean_proximity_distance_radians)
 
+    # Write proximity data.
     write_proximity_data(
             proximity_datas,
             age_grid_filenames_and_paleo_times,
@@ -1292,6 +1484,10 @@ def generate_and_write_proximity_data(
             output_mean_distance,
             output_standard_deviation_distance,
             output_grd_files)
+    
+    # Print CPU usage.
+    age_grid_paleo_times = [time for _, time in age_grid_filenames_and_paleo_times]
+    cpu_profile.print_usage(age_grid_paleo_times)
 
 
 # Wraps around 'generate_and_write_proximity_data()' so can be used by multiprocessing.Pool.map() which requires a single-argument function.

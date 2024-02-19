@@ -90,7 +90,7 @@ proximity_features_files = [
 # If not specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
 # Obstacles can be both polygons and polylines.
 #
-# Note: These can be *contoured* continents(see https://github.com/EarthByte/continent-contouring).
+# Note: These can be *contoured* continents (see https://github.com/EarthByte/continent-contouring).
 #       Ensure that the same rotation model is used for contouring (as is used in this workflow).
 #
 #continent_obstacle_files = None

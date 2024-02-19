@@ -7,8 +7,9 @@ To generate sediment thickness and rate grids through time, all that is required
 ## Dependencies
 
 You'll also need to install the following Python dependencies:
+* [NumPy](https://numpy.org/)
+* [SciPy](https://scipy.org/)
 * [Generic Mapping Tools (GMT) ](https://www.generic-mapping-tools.org/)
-* [numpy](https://numpy.org/)
 * [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools), or [GPlately](https://github.com/GPlates/gplately) (which now contains PlateTectonicTools).
 * And, on Windows platforms, optionally install [psutil](https://pypi.org/project/psutil/) so that this workflow can use CPU cores in the *background* (ie, below-normal priority).
 
@@ -16,7 +17,7 @@ You'll also need to install the following Python dependencies:
 You can install these with conda:
 
 ```
-conda create -n <conda-environment> -c conda-forge gmt numpy platetectonictools
+conda create -n <conda-environment> -c conda-forge numpy scipy gmt platetectonictools
 conda activate <conda-environment>
 ```
 
