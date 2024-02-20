@@ -194,7 +194,7 @@ class CpuProfile(object):
             self.time_usage_upscaled_mask_generate_input_points = 0.0
             self.time_usage_calculate_upscaled_mask_interpolation_params = 0.0
             self.time_usage_upscaled_sample_age_grid = 0.0
-            self.time_usage_convert_upscale_mask_samples_to_cartesian = 0.0
+            self.time_usage_extract_upscale_mask_samples = 0.0
             self.time_usage_create_and_query_kdtrees = 0.0
             self.time_usage_calc_interpolation_weights = 0.0
             self.time_usage_write_upscaled_grd_file = 0.0
@@ -239,12 +239,12 @@ class CpuProfile(object):
         if self.enable_profiling:
             self.time_usage_upscaled_sample_age_grid += self.profile() - self.time_snapshot_start_upscaled_sample_age_grid
     
-    def start_convert_upscale_mask_samples_to_cartesian(self):
+    def start_extract_upscale_mask_samples(self):
         if self.enable_profiling:
-            self.time_snapshot_start_convert_upscale_mask_samples_to_cartesian = self.profile()
-    def end_convert_upscale_mask_samples_to_cartesian(self):
+            self.time_snapshot_start_extract_upscale_mask_samples = self.profile()
+    def end_extract_upscale_mask_samples(self):
         if self.enable_profiling:
-            self.time_usage_convert_upscale_mask_samples_to_cartesian += self.profile() - self.time_snapshot_start_convert_upscale_mask_samples_to_cartesian
+            self.time_usage_extract_upscale_mask_samples += self.profile() - self.time_snapshot_start_extract_upscale_mask_samples
     
     def start_create_and_query_kdtrees(self):
         if self.enable_profiling:
@@ -302,7 +302,7 @@ class CpuProfile(object):
             print(f"      Generate upscaled mask input points: {self.time_usage_upscaled_mask_generate_input_points * scale_to_seconds:.2f} seconds")
             print(f"      Get upscaled mask interpolation parameters: {self.time_usage_calculate_upscaled_mask_interpolation_params * scale_to_seconds:.2f} seconds")
             print(f"        Sample age grid at upscaled grid spacing: {self.time_usage_upscaled_sample_age_grid * scale_to_seconds:.2f} seconds")
-            print(f"        Convert upscaled mask samples to cartesian: {self.time_usage_convert_upscale_mask_samples_to_cartesian * scale_to_seconds:.2f} seconds")
+            print(f"        Extract upscaled mask samples: {self.time_usage_extract_upscale_mask_samples * scale_to_seconds:.2f} seconds")
             print(f"        Create and query k-d trees: {self.time_usage_create_and_query_kdtrees * scale_to_seconds:.2f} seconds")
             print(f"        Calculate interpolation weights: {self.time_usage_calc_interpolation_weights * scale_to_seconds:.2f} seconds")
             print(f"      Write upscaled grd file: {self.time_usage_write_upscaled_grd_file * scale_to_seconds:.2f} seconds")
@@ -431,10 +431,6 @@ def generate_input_points_grid(grid_spacing_degrees):
     num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
 
     # Generate the input points on the grid.
-    #
-    # Note: The points are ordered by latitude first (then longitude) since the upscaling of grid points depends on this
-    #       (see the upscaled points fed to K-D trees in 'calculate_upscaled_mask_interpolation_params()').
-    #       For example, [[-180,-90], [-179,-90], ..., [-180,-89], [-179,-89], ...]
     input_points_mesh_grid = np.meshgrid(
             np.linspace(-180, 180, num_longitudes),
             np.linspace(-90, 90, num_latitudes))
@@ -670,74 +666,51 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
     #memory_profile.print_object_memory_usage(upscaled_masked_lon_lat_ages_string, 'upscaled_masked_lon_lat_ages_string')
     
     cpu_profile.end_upscaled_sample_age_grid()
-    cpu_profile.start_convert_upscale_mask_samples_to_cartesian()
+    cpu_profile.start_extract_upscale_mask_samples()
 
-    # Extract the age-grid-masked input points (as xyz cartesian coordinates).
+    # Extract the age-grid-masked input points.
     upscaled_masked_lon_lat_ages_lines = upscaled_masked_lon_lat_ages_string.splitlines()
     del upscaled_masked_lon_lat_ages_string  # free memory
     num_upscaled_points = len(upscaled_masked_lon_lat_ages_lines)
     upscaled_masked_lon_lats = np.empty((num_upscaled_points, 2), dtype=float)
-    upscaled_masked_cartesians = np.empty((num_upscaled_points, 3), dtype=float)
     for line_index, line in enumerate(upscaled_masked_lon_lat_ages_lines):
         # Each line returned by GMT grdtrack contains "longitude latitude age_grid_value".
         # Note that due to "-s" option to "gmt grdtrack" we will only get non-NaN age grid values.
         lon_str, lat_str, _ = line.split()
         lon, lat = float(lon_str), float(lat_str)
         upscaled_masked_lon_lats[line_index] = (lon, lat)
-        upscaled_masked_cartesians[line_index] = pygplates.PointOnSphere(lat, lon).to_xyz()  # (x,y,z) tuple
     del upscaled_masked_lon_lat_ages_lines  # free memory
     #memory_profile.print_object_memory_usage(upscaled_masked_lon_lats, 'upscaled_masked_lon_lats')
-    #memory_profile.print_object_memory_usage(upscaled_masked_cartesians, 'upscaled_masked_cartesians')
     
-    cpu_profile.end_convert_upscale_mask_samples_to_cartesian()
+    cpu_profile.end_extract_upscale_mask_samples()
     cpu_profile.start_create_and_query_kdtrees()
 
-    # Create a k-d tree of the source points.
-    src_cartesians = np.empty((len(src_lon_lats), 3), dtype=float)
-    for src_index, (src_lon, src_lat) in enumerate(src_lon_lats):
-        src_cartesians[src_index] = pygplates.PointOnSphere(src_lat, src_lon).to_xyz()  # (x,y,z) tuple
-    src_kdtree = KDTree(src_cartesians)
+    # Create a k-d tree of the source points (in lon-lat space).
+    src_kdtree = KDTree(src_lon_lats)
 
     cpu_profile.end_create_and_query_kdtrees()
 
     # The upscaled points (lon, lat) and their interpolation parameters (source indices and weights).
     # Each upscaled point has 4 indices (into the source points) and 4 associated inverse-distance weights.
     # Note: If not all 4 indices/weights are used then the unused ones get a weight of zero.
-    upscaled_masked_lon_lat_indices4_weights4 = np.zeros(num_upscaled_points, dtype=[('lon', 'f8'), ('lat', 'f8'), ('index', 'i4', 4), ('weight', 'f8', 4)])
+    upscaled_masked_lon_lat_index4_weight4 = np.zeros(num_upscaled_points, dtype=[('lon', 'f8'), ('lat', 'f8'), ('index', 'i4', 4), ('weight', 'f8', 4)])
     upscaled_masked_valid_index = 0
 
     # Query the nearest neighbours of the upscaled points in a loop.
     # This reduces memory usage quite significantly (since each loop iteration processes a subset of points and hence uses less memory).
     #
-    # Minimum and maximum number of upscaled points to query at a time (to avoid using too much memory).
-    min_upscaled_points_per_kdtree, max_upscaled_points_per_kdtree = 1*1000, 100*1000
+    # The number of upscaled points to query at a time (per loop iteration).
+    max_upscaled_points_per_kdtree = 100*1000
     upscaled_point_base_index = 0
     while upscaled_point_base_index < num_upscaled_points:
         cpu_profile.start_create_and_query_kdtrees()
 
-        # Set the number of upscaled points to search for nearest neighbours.
-        #
-        # Since the source points (and upscaled) are uniformly spaced in longitude/latitude space they tend to bunch together
-        # towards the North/South poles causing more source points to get included in each upscaled point query because of the
-        # fixed search radius (in cartesian space). This in turn causes the memory usage of the query to increase too high.
-        #
-        # So to limit this we decrease the number of upscaled points in the query (in upscaled k-d tree) the closer they are to the poles.
-        #
-        # Collect the upscaled longitude in the next upscaled batch of points (max size batch).
-        upscaled_masked_lats_to_try_per_kdtree = upscaled_masked_lon_lats[upscaled_point_base_index : upscaled_point_base_index + max_upscaled_points_per_kdtree, 1]
-        # Reduce the number of upscaled points by the minimum small circle radius of the globe parallel found at the minimum or maximum latitude (min(cosine(latitude))).
-        # Note: This depends on the points being ordered by latitude first (then longitude) - see 'generate_input_points_grid()'.
-        upscaled_points_per_kdtree = math.ceil(max_upscaled_points_per_kdtree * np.min(np.cos(np.deg2rad((np.min(upscaled_masked_lats_to_try_per_kdtree), np.max(upscaled_masked_lats_to_try_per_kdtree))))))
-        # But don't reduce below a minimum number of upscaled points.
-        if upscaled_points_per_kdtree < min_upscaled_points_per_kdtree:
-            upscaled_points_per_kdtree = min_upscaled_points_per_kdtree
-
-        # Create a k-d tree of the subset of upscaled points in the current loop iteration.
-        upscaled_masked_kdtree = KDTree(upscaled_masked_cartesians[upscaled_point_base_index : upscaled_point_base_index + upscaled_points_per_kdtree])
+        # Create a k-d tree of the subset of upscaled points in the current loop iteration (in lon-lat space).
+        upscaled_masked_kdtree = KDTree(upscaled_masked_lon_lats[upscaled_point_base_index : upscaled_point_base_index + max_upscaled_points_per_kdtree])
 
         # For each upscaled point search within a radius around it for source points.
-        # Use a large enough radius to capture the four nearest neighbours (at the equator where lon-lat grid spacing is the largest on the globe).
-        search_radius = 1.5 * np.deg2rad(src_grid_spacing)
+        # Use a large enough radius to capture 2 or more nearest neighbours but not too large to capture 9.
+        search_radius = 1.5 * src_grid_spacing
         upscaled_src_indices = upscaled_masked_kdtree.query_ball_tree(src_kdtree, search_radius)
         #memory_profile.print_object_memory_usage(upscaled_src_indices, 'upscaled_src_indices')
 
@@ -750,67 +723,61 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
             if not src_indices:
                 continue
 
-            upscaled_lon, upscaled_lat = upscaled_masked_lon_lats[upscaled_point_base_index + upscaled_point_index]
-            upscaled_cartesian = upscaled_masked_cartesians[upscaled_point_base_index + upscaled_point_index]
+            upscaled_lon_lat = upscaled_masked_lon_lats[upscaled_point_base_index + upscaled_point_index]
+            upscaled_lon, upscaled_lat = upscaled_lon_lat
 
             # Each upscaled point gets 4 source indices and 4 weights.
-            upscaled_src_indices4 = np.zeros(4, dtype=int)
-            upscaled_src_weights4 = np.zeros(4, dtype=float)
+            upscaled_src_index4 = np.zeros(4, dtype=int)
+            upscaled_src_weight4 = np.zeros(4, dtype=float)
 
-            # The minimum distance to a source point in each quadrant around upscaled point.
-            # Initialise to the search radius as this will give a weight of zero if a source point is not found in a quadrant.
-            upscaled_src_distances4 = np.full(4, search_radius, dtype=float)
+            # The minimum distance squared to a source point in each quadrant around upscaled point.
+            # Initialise to a large value (that all distances squared will be less).
+            upscaled_src_distances_squared4 = np.full(4, 1e30, dtype=float)
+            # Whether each quadrant has a source point.
+            upscaled_src_valid4 = np.full(4, False, dtype=bool)
 
             # Calculate the 4 source indices (of closest source point in each quadrant) and their inverse-distance weights.
             for src_index in src_indices:
-                # Distance from upscaled point to its current near neighbour.
-                src_distance = np.sqrt(np.sum((upscaled_cartesian - src_cartesians[src_index]) ** 2))
-                # If near neighbour coincides with upscaled point then give it the full weighting (and with other neighbours getting zero weighting).
-                # Also avoids divide by zero in inverse distance weight.
-                if src_distance < 1e-6:
-                    # Set source index and weight (in first entry) and leave other entries as zero.
-                    upscaled_src_indices4[:] = (src_index, 0, 0, 0)
-                    upscaled_src_weights4[:] = (1.0, 0.0, 0.0, 0.0)
-                    break
+                src_lon_lat = src_lon_lats[src_index]
+                # Distance squared from upscaled point to its current near neighbour.
+                src_distance_squared = np.sum((upscaled_lon_lat - src_lon_lat) ** 2)
                 # Determine which quadrant the current source point is in (an index in the range[0,3]).
-                src_lon, src_lat = src_lon_lats[src_index]
-                quadrant_index = int(src_lon < upscaled_lon) * 2 + int(src_lat < upscaled_lat)
-                # Update the quadrant's minimum distance (and associated source point index).
-                if src_distance < upscaled_src_distances4[quadrant_index]:
-                    upscaled_src_distances4[quadrant_index] = src_distance
-                    upscaled_src_indices4[quadrant_index] = src_index
-            else:
-                # Calculate the source weights based on distance.
-                # For the weight equation see https://en.wikipedia.org/wiki/Inverse_distance_weighting#Modified_Shepard's_method
-                upscaled_src_weights4 = ((search_radius - upscaled_src_distances4) / (search_radius * upscaled_src_distances4)) ** 2
-                # Normalise the weights.
-                sum_upscaled_src_weights4 = np.sum(upscaled_src_weights4)
-                # It's possible that the source points are all exactly ON the search radius (giving them all zero weights).
-                # In this case we'll consider them too far away from the current upscaled point and so we'll skip the current upscaled point.
-                if sum_upscaled_src_weights4 == 0.0:
-                    continue
-                upscaled_src_weights4 /= sum_upscaled_src_weights4
+                src_lon, src_lat = src_lon_lat
+                quadrant_index = (src_lon < upscaled_lon) * 2 + (src_lat < upscaled_lat)  # 0, 1, 2 or 3
+                # Update the quadrant's minimum distance squared (and associated source point index).
+                if src_distance_squared < upscaled_src_distances_squared4[quadrant_index]:
+                    upscaled_src_distances_squared4[quadrant_index] = src_distance_squared
+                    upscaled_src_index4[quadrant_index] = src_index
+                    upscaled_src_valid4[quadrant_index] = True
+            
+            # Calculate the source weights based on distance.
+            # We use the same weighting function as GMT's 'nearneighbor'.
+            # Only set the valid entries (leave the rest as zero).
+            upscaled_src_weight4[upscaled_src_valid4] = 1.0 / (1.0 + 9.0 * upscaled_src_distances_squared4[upscaled_src_valid4] / search_radius**2)
+            # Normalise the weights.
+            upscaled_src_weight4 /= np.sum(upscaled_src_weight4)
 
-            upscaled_masked_lon_lat_indices4_weights4[upscaled_masked_valid_index] = (
+            # Store in the output array.
+            upscaled_masked_lon_lat_index4_weight4[upscaled_masked_valid_index] = (
                     upscaled_lon,
                     upscaled_lat,
-                    upscaled_src_indices4,
-                    upscaled_src_weights4)
+                    upscaled_src_index4,
+                    upscaled_src_weight4)
             upscaled_masked_valid_index += 1
 
-        upscaled_point_base_index += upscaled_points_per_kdtree
+        upscaled_point_base_index += max_upscaled_points_per_kdtree
 
         cpu_profile.end_calc_interpolation_weights()
     
     # Resize the number of upscaled points since some might not be near any source points (and hence got excluded).
-    upscaled_masked_lon_lat_indices4_weights4 = upscaled_masked_lon_lat_indices4_weights4[:upscaled_masked_valid_index]
+    upscaled_masked_lon_lat_index4_weight4 = upscaled_masked_lon_lat_index4_weight4[:upscaled_masked_valid_index]
 
     # The 'copy()' avoids the above view (slice) which does not count array storage.
-    memory_profile.print_object_memory_usage(upscaled_masked_lon_lat_indices4_weights4.copy(), 'upscaled_masked_lon_lat_indices4_weights4')
+    #memory_profile.print_object_memory_usage(upscaled_masked_lon_lat_index4_weight4.copy(), 'upscaled_masked_lon_lat_index4_weight4')
 
     cpu_profile.end_calculate_upscaled_mask_interpolation_params()
 
-    return upscaled_masked_lon_lat_indices4_weights4
+    return upscaled_masked_lon_lat_index4_weight4
 
 
 def write_upscaled_grd_file(grd_filename, scalars, upscaled_lon_lat_indices_weights, upscaled_grid_spacing):
@@ -1146,7 +1113,7 @@ def proximity(
                                                                          output_mean_distance, output_standard_deviation_distance, output_distance_with_time,
                                                                          clamp_mean_proximity_distance_kms)
                     #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
-                    memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
+                    #memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
         
         cpu_profile.end_read_age_grid()
         
@@ -1345,8 +1312,8 @@ def proximity(
     cpu_profile.end_proximity()
     
     #memory_profile.print_object_memory_usage(proximity_datas, 'proximity_datas')
-    for proximity_data_time in proximity_datas.keys():
-        memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}]'.format(proximity_data_time))
+    #for proximity_data_time in proximity_datas.keys():
+    #    memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}]'.format(proximity_data_time))
 
     return proximity_datas
     
