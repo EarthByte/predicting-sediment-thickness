@@ -1120,7 +1120,7 @@ def proximity(
                                                                          output_mean_distance, output_standard_deviation_distance, output_distance_with_time,
                                                                          clamp_mean_proximity_distance_kms)
                     #print('Created age grid {} at time {}'.format(age_grid_paleo_time, time))
-                    #memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
+                    memory_profile.print_object_memory_usage(ocean_basin_reconstructions[age_grid_paleo_time], 'ocean_basin_reconstructions[{}]'.format(age_grid_paleo_time))
         
         cpu_profile.end_read_age_grid()
         
@@ -1318,7 +1318,7 @@ def proximity(
     cpu_profile.end_reconstruct_and_calculate_distances()
     cpu_profile.end_proximity()
     
-    #memory_profile.print_object_memory_usage(proximity_datas, 'proximity_datas')
+    memory_profile.print_object_memory_usage(proximity_datas, 'proximity_datas')
     #for proximity_data_time in proximity_datas.keys():
     #    memory_profile.print_object_memory_usage(proximity_datas[proximity_data_time], 'proximity_datas[{}]'.format(proximity_data_time))
 
@@ -1583,6 +1583,9 @@ def generate_and_write_proximity_data_parallel(
     def memory_usage_per_task(num_age_grids_per_task_):
         return base_memory_usage_per_task_in_gb + num_age_grids_per_task_ * delta_memory_usage_per_age_grid_in_gb
 
+    # Did we clamp to the minimum number of age grids per task?
+    clamped_minimum_num_age_grids_per_task = False
+
     # If we've been given a limit on memory usage then determine how many age grids to process per task.
     if max_memory_usage_in_gb:
         # The memory used by the number of age grids per task multiplied by the number of tasks processed in parallel should not exceed the maximum memory usage.
@@ -1590,6 +1593,7 @@ def generate_and_write_proximity_data_parallel(
         # But don't reduce below the minimum number of age grids per task.
         if num_age_grids_per_task < min_num_age_grids_per_task:
             num_age_grids_per_task = min_num_age_grids_per_task
+            clamped_minimum_num_age_grids_per_task = True
             # Reduce the number of CPUs to compensate for the higher than expected number of age grids per task, so that we don't exceed the memory limit.
             # Number of CPUs is the max memory divided by the memory used to process 'num_age_grids_per_task' age grids.
             num_cpus = math.trunc(max_memory_usage_in_gb / memory_usage_per_task(num_age_grids_per_task))
@@ -1599,25 +1603,35 @@ def generate_and_write_proximity_data_parallel(
         # No limits on memory usage were specified, so just use the minimum number of age grids per task.
         num_age_grids_per_task = min_num_age_grids_per_task
     
+    num_total_tasks = math.ceil(num_age_grids / num_age_grids_per_task)
+
     # If there are fewer total tasks than twice the number of CPUs then reduce the number of age grids per task
     # (but not less than the minimum) so that each CPU gets two tasks to process.
     # This helps to better utilise all CPUs when each task takes a different amount of time to complete.
-    num_total_tasks = math.ceil(num_age_grids / num_age_grids_per_task)
-    if num_total_tasks < 2 * num_cpus:
-        # Note that reducing the number of age grids per task uses less memory (ie, doesn't violate our max memory limit).
-        num_age_grids_per_task = math.ceil(num_age_grids / (2 * num_cpus))
-        if num_age_grids_per_task < min_num_age_grids_per_task:
-            num_age_grids_per_task = min_num_age_grids_per_task
-        num_total_tasks = math.ceil(num_age_grids / num_age_grids_per_task)
-        # If there are fewer tasks than the number of CPUs reduce the number of CPUs to match.
-        if num_total_tasks < num_cpus:
-            num_cpus = num_total_tasks
+    # But this is only useful if using more than one CPU.
+    if num_cpus > 1:
+        if num_total_tasks < 2 * num_cpus:
+            # Note that reducing the number of age grids per task uses less memory (ie, doesn't violate our max memory limit).
+            num_age_grids_per_task = math.ceil(num_age_grids / (2 * num_cpus))
+            clamped_minimum_num_age_grids_per_task = False  # just re-calculated 'num_age_grids_per_task'
+            if num_age_grids_per_task < min_num_age_grids_per_task:
+                num_age_grids_per_task = min_num_age_grids_per_task
+                clamped_minimum_num_age_grids_per_task = True
+            num_total_tasks = math.ceil(num_age_grids / num_age_grids_per_task)
+            # If there are fewer tasks than the number of CPUs reduce the number of CPUs to match.
+            if num_total_tasks < num_cpus:
+                num_cpus = num_total_tasks
+    
+    # Number of age grids per task does not need to exceed the total number of age grids.
+    # This happens when there's just one task.
+    if num_age_grids_per_task > num_age_grids:
+        num_age_grids_per_task = num_age_grids
 
     if max_memory_usage_in_gb:
         print('Maximum memory usage: {:.2f}GB'.format(max_memory_usage_in_gb))
     print('Approximate memory usage: {:.2f}GB'.format(num_cpus * memory_usage_per_task(num_age_grids_per_task)))
     print('Number of age grids: {}'.format(num_age_grids))
-    print('Number of age grids per task: {}'.format(num_age_grids_per_task))
+    print('Number of age grids per task: {}{}'.format(num_age_grids_per_task, ' (clamped to minimum)' if clamped_minimum_num_age_grids_per_task else ''))
     print('Number of total tasks: {}'.format(num_total_tasks))
     print('Number of tasks in a batch (num CPUs): {}'.format(num_cpus))
     print('Number of task batches: {}'.format(math.ceil(num_total_tasks / num_cpus)))
