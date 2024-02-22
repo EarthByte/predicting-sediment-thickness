@@ -693,7 +693,7 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
     # The upscaled points (lon, lat) and their interpolation parameters (source indices and weights).
     # Each upscaled point has 4 indices (into the source points) and 4 associated inverse-distance weights.
     # Note: If not all 4 indices/weights are used then the unused ones get a weight of zero.
-    upscaled_masked_lon_lat_index4_weight4 = np.zeros(num_upscaled_points, dtype=[('lon', 'f8'), ('lat', 'f8'), ('index', 'i4', 4), ('weight', 'f8', 4)])
+    upscaled_masked_lon_lat_index6_weight6 = np.zeros(num_upscaled_points, dtype=[('lon', 'f8'), ('lat', 'f8'), ('index', 'i4', 6), ('weight', 'f8', 6)])
     upscaled_masked_valid_index = 0
 
     # Query the nearest neighbours of the upscaled points in a loop.
@@ -709,8 +709,16 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
         upscaled_masked_kdtree = KDTree(upscaled_masked_lon_lats[upscaled_point_base_index : upscaled_point_base_index + max_upscaled_points_per_kdtree])
 
         # For each upscaled point search within a radius around it for source points.
-        # Use a large enough radius to capture the nearest 4 neighbours for the bilinear filter of each query point (ie, should be at least sqrt(2)).
-        search_radius = 1.5 * src_grid_spacing
+        # Use a search radius that will capture at most 6 nearest neighbours (of uniformly gridded source points).
+        # So we want the search radius to be between sqrt(1^2 + 1^2) = 1.414 and sqrt(1^2 + 0.5^2) = 1.118 as shown in the two diagrams...
+        #
+        # . x .   . x x .
+        # x o x   . xox .
+        # . x .   . x x .
+        #
+        # ...where 'x' is a near neighbour source point and 'o' is the upscaled point.
+        # The first diagram has 5 source points (one 'x' is at the 'o') and the second has 6 source points.
+        search_radius = 1.2 * src_grid_spacing
         upscaled_src_indices = upscaled_masked_kdtree.query_ball_tree(src_kdtree, search_radius)
         #memory_profile.print_object_memory_usage(upscaled_src_indices, 'upscaled_src_indices')
 
@@ -735,54 +743,63 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
             #
 
             upscaled_lon, upscaled_lat = upscaled_masked_lon_lats[upscaled_point_base_index + upscaled_point_index]
+            # Convert np.float to native float to avoid triggering subsequent numpy calls.
+            upscaled_lon, upscaled_lat = float(upscaled_lon), float(upscaled_lat)
 
-            # Each upscaled point gets 4 source indices and 4 weights.
-            upscaled_src_index4 = [0, 0, 0, 0]
-            upscaled_src_weight4 = [0.0, 0.0, 0.0, 0.0]
-            # Populate up to 4 weights starting at the first element of each 4-element index/weight array.
+            # Each upscaled point gets 6 source indices and 6 weights.
+            upscaled_src_index6 = [0, 0, 0, 0, 0, 0]
+            upscaled_src_weight6 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            # Populate up to 6 weights starting at the first element of each 6-element index/weight array.
             current_src_weight_index = 0
 
-            # Calculate up to 4 source indices/weights of the bilinear filter surrounding the current upscaled point.
+            # Calculate up to 6 source indices/weights surrounding the current upscaled point.
             for src_index in src_indices:
                 src_lon, src_lat = src_lon_lats[src_index]
-                # Distance (in longitude and latitude directions) from upscaled point to its current near neighbour.
-                distance_lon = abs(upscaled_lon - src_lon)
-                distance_lat = abs(upscaled_lat - src_lat)
-                # Add the current source point to the bilinear filter if it is slightly within the bilinear filter mask.
+                # Convert np.float to native float to avoid triggering subsequent numpy calls.
+                src_lon, src_lat =  float(src_lon), float(src_lat)
+
+                # Distance from upscaled point to its current near neighbour.
+                delta_lon = upscaled_lon - src_lon
+                delta_lat = upscaled_lat - src_lat
+                distance = math.sqrt(delta_lon*delta_lon + delta_lat*delta_lat)
+
+                # Calculate the filter weight for the current source point based on its distance to the upscaled point.
                 #
-                # Note: We move the filter mask inward slightly so that if the upscaled point longitude is one source grid spacing
-                #       away from the source point longitude (similarly for latitude) then it won't be included in the bilinear mask.
-                #       This is because we only have space for 4 bilinear weights and it will have a bilinear weight of zero anyway.
-                #       If we didn't do this then it'd be possible to get up to 9 weights (if upscaled point coincides with a source grid point).
-                if (distance_lon < 0.9999 * src_grid_spacing and
-                    distance_lat < 0.9999 * src_grid_spacing):
-                    upscaled_src_index4[current_src_weight_index] = src_index
-                    # Calculate the bilinear filter weight for the current source point.
-                    # Note: It should be non-zero due to the 0.9999 above.
-                    upscaled_src_weight4[current_src_weight_index] = (src_grid_spacing - distance_lon) * (src_grid_spacing - distance_lat)
-                    current_src_weight_index += 1
-                    # Make sure we don't try to use more than 4 weights.
-                    # Shouldn't need this if the source points are uniformly gridded at 'src_grid_spacing',
-                    # but just in case we'll be satisfied with whatever 4 weights we get.
-                    if current_src_weight_index == 4:
+                # The numerator is linear from 'search_radius' at centre to ~0 at the radius.
+                # The denominator is linear from 1 at centre to 3 at the radius to give the filter a steeper drop-off.
+                #
+                # Note: The 1.0001 multiplier ensures a slightly non-zero weight (when distance==search_radius).
+                #       This ensures we never get a divide-by-zero error when normalised the weights.
+                upscaled_src_weight6[current_src_weight_index] = (1.0001 * search_radius - distance) / (1 + 2 * distance / search_radius)
+                upscaled_src_index6[current_src_weight_index] = src_index
+                current_src_weight_index += 1
+
+                # Make sure we don't try to use more than 6 weights.
+                # Shouldn't need this if the source points are uniformly gridded at 'src_grid_spacing' and we've set the search radius correctly.
+                # But check just in case (we'll be satisfied with whatever 6 weights we get).
+                if current_src_weight_index == 6:
                         break
-            # It's possible that there are source points within the search radius but not within the bilinear filter mask.
-            # In this case we skip the current upscaled point.
-            if current_src_weight_index == 0:
-                continue
+            
             # Normalise the weights.
             #
-            # We should have at least one non-zero weight due to the 0.9999 multiplier above (to determine if source point is within the bilinear filter mask).
+            # We should have at least one non-zero weight due to the 1.0001 multiplier above (in the weight calculation), and hence no divide-by-zero error.
             #
-            # Note: The 'current_src_weight_index' used weights should be non-zero, and the remaining unused weights (if any) are zero and hence don't contribute to the sum.
-            upscaled_src_weight4 /= sum(upscaled_src_weight4)
+            # Note: The first 'current_src_weight_index' weights should be non-zero, and
+            #       the remaining unused weights (if any) are zero and hence don't contribute to the sum.
+            inv_sum_upscaled_src_weight6 = 1.0 / sum(upscaled_src_weight6)
+            upscaled_src_weight6[0] *= inv_sum_upscaled_src_weight6
+            upscaled_src_weight6[1] *= inv_sum_upscaled_src_weight6
+            upscaled_src_weight6[2] *= inv_sum_upscaled_src_weight6
+            upscaled_src_weight6[3] *= inv_sum_upscaled_src_weight6
+            upscaled_src_weight6[4] *= inv_sum_upscaled_src_weight6
+            upscaled_src_weight6[5] *= inv_sum_upscaled_src_weight6
 
             # Store in the output array.
-            upscaled_masked_lon_lat_index4_weight4[upscaled_masked_valid_index] = (
+            upscaled_masked_lon_lat_index6_weight6[upscaled_masked_valid_index] = (
                     upscaled_lon,
                     upscaled_lat,
-                    upscaled_src_index4,
-                    upscaled_src_weight4)
+                    upscaled_src_index6,
+                    upscaled_src_weight6)
             upscaled_masked_valid_index += 1
 
         upscaled_point_base_index += max_upscaled_points_per_kdtree
@@ -790,14 +807,14 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
         cpu_profile.end_calc_interpolation_weights()
     
     # Resize the number of upscaled points since some might not be near any source points (and hence got excluded).
-    upscaled_masked_lon_lat_index4_weight4 = upscaled_masked_lon_lat_index4_weight4[:upscaled_masked_valid_index]
+    upscaled_masked_lon_lat_index6_weight6 = upscaled_masked_lon_lat_index6_weight6[:upscaled_masked_valid_index]
 
     # The 'copy()' avoids the above view (slice) which does not count array storage.
-    #memory_profile.print_object_memory_usage(upscaled_masked_lon_lat_index4_weight4.copy(), 'upscaled_masked_lon_lat_index4_weight4')
+    #memory_profile.print_object_memory_usage(upscaled_masked_lon_lat_index6_weight6.copy(), 'upscaled_masked_lon_lat_index6_weight6')
 
     cpu_profile.end_calculate_upscaled_mask_interpolation_params()
 
-    return upscaled_masked_lon_lat_index4_weight4
+    return upscaled_masked_lon_lat_index6_weight6
 
 
 def write_upscaled_grd_file(grd_filename, scalars, upscaled_lon_lat_indices_weights, upscaled_grid_spacing):
