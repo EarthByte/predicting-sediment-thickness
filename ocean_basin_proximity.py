@@ -805,11 +805,14 @@ def write_upscaled_grd_file(grd_filename, scalars, upscaled_lon_lat_indices_weig
     cpu_profile.start_calc_upscaled_scalars()
 
     # Calculate the upscaled scalars using the upscaled interpolation weights.
-    upscaled_lon_lat_scalars = np.empty((upscaled_lon_lat_indices_weights.size, 3), dtype=float)
-    for upscaled_point_index, (upscaled_lon, upscaled_lat, scalar_indices, scalar_weights) in enumerate(upscaled_lon_lat_indices_weights):
-        # Interpolate the source scalars.
-        upscaled_scalar = np.sum(scalars[scalar_indices] * scalar_weights)
-        upscaled_lon_lat_scalars[upscaled_point_index] = (upscaled_lon, upscaled_lat, upscaled_scalar)
+    #
+    # Note: We avoid iterating over the upscaled points (in a for loop) to avoid the numpy call overhead per loop iteration
+    #       (around 0.25 to 1.5 microseconds per call) when looping over, eg, 6.5 million points (for 0.1 degree upscaled grid spacing).
+    upscaled_lon_lat_scalars = np.column_stack((
+            upscaled_lon_lat_indices_weights['lon'],  # lons
+            upscaled_lon_lat_indices_weights['lat'],  # lats
+            # For each upscaled point weight the scalars from near neighbour source points...
+            np.sum(scalars[upscaled_lon_lat_indices_weights['index']] * upscaled_lon_lat_indices_weights['weight'], axis=1)))  # scalars
     #memory_profile.print_object_memory_usage(upscaled_lon_lat_scalars, 'upscaled_lon_lat_scalars')
 
     cpu_profile.end_calc_upscaled_scalars()
