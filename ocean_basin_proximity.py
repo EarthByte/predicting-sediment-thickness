@@ -723,11 +723,22 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
             if not src_indices:
                 continue
 
+            #
+            # NOTE: In this loop we try NOT to call any NumPy functions/operators.
+            #       The call overhead for each numpy call is around 0.25 (for multiply operator '*') to 1.5 microseconds (for np.sum).
+            #       And that's before any internal calculations.
+            #       Contrast that with Python's builtin 'sum' which has only 0.05 microseconds of overhead (ie, 30 times less!).
+            #       At an upscale grid spacing of 0.1 degrees there are 6,485,401 points to process in this loop.
+            #       So a single 'np.sum' call will add an overhead of about 10 seconds (6,485,401 * 1.5e-6).
+            #       And, even worse, in the inner loop below (over nearest source points) multiply this time by about 5 (number of near neighbours)
+            #       to get 50 seconds of overhead per 'np.sum' call!
+            #
+
             upscaled_lon, upscaled_lat = upscaled_masked_lon_lats[upscaled_point_base_index + upscaled_point_index]
 
             # Each upscaled point gets 4 source indices and 4 weights.
-            upscaled_src_index4 = np.zeros(4, dtype=int)
-            upscaled_src_weight4 = np.zeros(4, dtype=float)
+            upscaled_src_index4 = [0, 0, 0, 0]
+            upscaled_src_weight4 = [0.0, 0.0, 0.0, 0.0]
             # Populate up to 4 weights starting at the first element of each 4-element index/weight array.
             current_src_weight_index = 0
 
@@ -735,18 +746,20 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
             for src_index in src_indices:
                 src_lon, src_lat = src_lon_lats[src_index]
                 # Distance (in longitude and latitude directions) from upscaled point to its current near neighbour.
-                distance_lon_lat = np.absolute((upscaled_lon - src_lon, upscaled_lat - src_lat))
+                distance_lon = abs(upscaled_lon - src_lon)
+                distance_lat = abs(upscaled_lat - src_lat)
                 # Add the current source point to the bilinear filter if it is slightly within the bilinear filter mask.
                 #
                 # Note: We move the filter mask inward slightly so that if the upscaled point longitude is one source grid spacing
                 #       away from the source point longitude (similarly for latitude) then it won't be included in the bilinear mask.
                 #       This is because we only have space for 4 bilinear weights and it will have a bilinear weight of zero anyway.
                 #       If we didn't do this then it'd be possible to get up to 9 weights (if upscaled point coincides with a source grid point).
-                if np.all(distance_lon_lat < 0.9999 * src_grid_spacing):
+                if (distance_lon < 0.9999 * src_grid_spacing and
+                    distance_lat < 0.9999 * src_grid_spacing):
                     upscaled_src_index4[current_src_weight_index] = src_index
                     # Calculate the bilinear filter weight for the current source point.
                     # Note: It should be non-zero due to the 0.9999 above.
-                    upscaled_src_weight4[current_src_weight_index] = np.prod(src_grid_spacing - distance_lon_lat)
+                    upscaled_src_weight4[current_src_weight_index] = (src_grid_spacing - distance_lon) * (src_grid_spacing - distance_lat)
                     current_src_weight_index += 1
                     # Make sure we don't try to use more than 4 weights.
                     # Shouldn't need this if the source points are uniformly gridded at 'src_grid_spacing',
@@ -762,7 +775,7 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
             # We should have at least one non-zero weight due to the 0.9999 multiplier above (to determine if source point is within the bilinear filter mask).
             #
             # Note: The 'current_src_weight_index' used weights should be non-zero, and the remaining unused weights (if any) are zero and hence don't contribute to the sum.
-            upscaled_src_weight4 /= np.sum(upscaled_src_weight4)
+            upscaled_src_weight4 /= sum(upscaled_src_weight4)
 
             # Store in the output array.
             upscaled_masked_lon_lat_index4_weight4[upscaled_masked_valid_index] = (
