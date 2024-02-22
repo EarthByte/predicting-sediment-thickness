@@ -709,7 +709,7 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
         upscaled_masked_kdtree = KDTree(upscaled_masked_lon_lats[upscaled_point_base_index : upscaled_point_base_index + max_upscaled_points_per_kdtree])
 
         # For each upscaled point search within a radius around it for source points.
-        # Use a large enough radius to capture 2 or more nearest neighbours but not too large to capture 9.
+        # Use a large enough radius to capture the nearest 4 neighbours for the bilinear filter of each query point (ie, should be at least sqrt(2)).
         search_radius = 1.5 * src_grid_spacing
         upscaled_src_indices = upscaled_masked_kdtree.query_ball_tree(src_kdtree, search_radius)
         #memory_profile.print_object_memory_usage(upscaled_src_indices, 'upscaled_src_indices')
@@ -723,38 +723,45 @@ def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing,
             if not src_indices:
                 continue
 
-            upscaled_lon_lat = upscaled_masked_lon_lats[upscaled_point_base_index + upscaled_point_index]
-            upscaled_lon, upscaled_lat = upscaled_lon_lat
+            upscaled_lon, upscaled_lat = upscaled_masked_lon_lats[upscaled_point_base_index + upscaled_point_index]
 
             # Each upscaled point gets 4 source indices and 4 weights.
             upscaled_src_index4 = np.zeros(4, dtype=int)
             upscaled_src_weight4 = np.zeros(4, dtype=float)
+            # Populate up to 4 weights starting at the first element of each 4-element index/weight array.
+            current_src_weight_index = 0
 
-            # The minimum distance squared to a source point in each quadrant around upscaled point.
-            # Initialise to a large value (that all distances squared will be less).
-            upscaled_src_distances_squared4 = np.full(4, 1e30, dtype=float)
-            # Whether each quadrant has a source point.
-            upscaled_src_valid4 = np.full(4, False, dtype=bool)
-
-            # Calculate the 4 source indices (of closest source point in each quadrant) and their inverse-distance weights.
+            # Calculate up to 4 source indices/weights of the bilinear filter surrounding the current upscaled point.
             for src_index in src_indices:
-                src_lon_lat = src_lon_lats[src_index]
-                # Distance squared from upscaled point to its current near neighbour.
-                src_distance_squared = np.sum((upscaled_lon_lat - src_lon_lat) ** 2)
-                # Determine which quadrant the current source point is in (an index in the range[0,3]).
-                src_lon, src_lat = src_lon_lat
-                quadrant_index = (src_lon < upscaled_lon) * 2 + (src_lat < upscaled_lat)  # 0, 1, 2 or 3
-                # Update the quadrant's minimum distance squared (and associated source point index).
-                if src_distance_squared < upscaled_src_distances_squared4[quadrant_index]:
-                    upscaled_src_distances_squared4[quadrant_index] = src_distance_squared
-                    upscaled_src_index4[quadrant_index] = src_index
-                    upscaled_src_valid4[quadrant_index] = True
-            
-            # Calculate the source weights based on distance.
-            # We use the same weighting function as GMT's 'nearneighbor'.
-            # Only set the valid entries (leave the rest as zero).
-            upscaled_src_weight4[upscaled_src_valid4] = 1.0 / (1.0 + 9.0 * upscaled_src_distances_squared4[upscaled_src_valid4] / search_radius**2)
+                src_lon, src_lat = src_lon_lats[src_index]
+                # Distance (in longitude and latitude directions) from upscaled point to its current near neighbour.
+                distance_lon_lat = np.absolute((upscaled_lon - src_lon, upscaled_lat - src_lat))
+                # Add the current source point to the bilinear filter if it is slightly within the bilinear filter mask.
+                #
+                # Note: We move the filter mask inward slightly so that if the upscaled point longitude is one source grid spacing
+                #       away from the source point longitude (similarly for latitude) then it won't be included in the bilinear mask.
+                #       This is because we only have space for 4 bilinear weights and it will have a bilinear weight of zero anyway.
+                #       If we didn't do this then it'd be possible to get up to 9 weights (if upscaled point coincides with a source grid point).
+                if np.all(distance_lon_lat < 0.9999 * src_grid_spacing):
+                    upscaled_src_index4[current_src_weight_index] = src_index
+                    # Calculate the bilinear filter weight for the current source point.
+                    # Note: It should be non-zero due to the 0.9999 above.
+                    upscaled_src_weight4[current_src_weight_index] = np.prod(src_grid_spacing - distance_lon_lat)
+                    current_src_weight_index += 1
+                    # Make sure we don't try to use more than 4 weights.
+                    # Shouldn't need this if the source points are uniformly gridded at 'src_grid_spacing',
+                    # but just in case we'll be satisfied with whatever 4 weights we get.
+                    if current_src_weight_index == 4:
+                        break
+            # It's possible that there are source points within the search radius but not within the bilinear filter mask.
+            # In this case we skip the current upscaled point.
+            if current_src_weight_index == 0:
+                continue
             # Normalise the weights.
+            #
+            # We should have at least one non-zero weight due to the 0.9999 multiplier above (to determine if source point is within the bilinear filter mask).
+            #
+            # Note: The 'current_src_weight_index' used weights should be non-zero, and the remaining unused weights (if any) are zero and hence don't contribute to the sum.
             upscaled_src_weight4 /= np.sum(upscaled_src_weight4)
 
             # Store in the output array.
