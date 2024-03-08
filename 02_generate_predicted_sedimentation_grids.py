@@ -58,6 +58,10 @@ min_time = 0
 max_time = 250
 time_step = 1
 
+# Whether to generate predicted sediment thickness grids and/or sedimentation rate grids.
+generate_sediment_thickness_grids = True
+generate_sedimentation_rate_grids = True
+
 distance_grid_spacing = 0.1   # grid spacing of input distance grids
 grid_spacing = 0.1            # grid spacing of output sedimentation grids
 
@@ -260,87 +264,88 @@ if __name__ == '__main__':
     #     print('Polynomial feature names:', regressor.named_steps['poly'].get_feature_names())
     #
     #
-
-    # updated for GlobSed and TRUNK agegrids
-    predict_sedimentation_script = 'predict_sedimentation_rate.py'
-    #scale_sedimentation_rate = 1.0  # Keep predicted rate in (cm/Ky).
-    scale_sedimentation_rate = 10.0  # Scale predicted rate (cm/Ky) to (m/My).
-    mean_age = 61.17716597
-    mean_distance = 1835.10750592
-    variance_age =  1934.78513885
-    variance_distance = 1207587.8548734
-    max_age = 191.87276
-    max_distance = 3000.
-    age_distance_polynomial_coefficients = [
-            1.350082937086441, -0.26385415, -0.07516542,  0.39197707, -0.15475392,
-        0.        , -0.13196083,  0.02481208, -0.        , -0.47570021]
-    
-    output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_rate'
-    
-    # check if the output dir exists. If not, create
-    if not os.path.exists(output_dir):
-        print('{} does not exist, creating now... '.format(output_dir))
-        os.mkdir(output_dir)
-
-    print('Generating predicted sedimentation rate grids...')
-
-    if use_all_cpus:
-    
-        # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
-        if isinstance(use_all_cpus, bool):
-            try:
-                num_cpus = multiprocessing.cpu_count()
-            except NotImplementedError:
-                num_cpus = 1
-        # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
-        elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
-            num_cpus = use_all_cpus
-        else:
-            raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
+    if generate_sedimentation_rate_grids:
         
-        try:
-            # Split the workload across the CPUs.
-            pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-            pool_map_async_result = pool.map_async(
-                    generate_predicted_sedimentation_grid_parallel_pool_function,
-                    (
+        # updated for GlobSed and TRUNK agegrids
+        predict_sedimentation_script = 'predict_sedimentation_rate.py'
+        #scale_sedimentation_rate = 1.0  # Keep predicted rate in (cm/Ky).
+        scale_sedimentation_rate = 10.0  # Scale predicted rate (cm/Ky) to (m/My).
+        mean_age = 61.17716597
+        mean_distance = 1835.10750592
+        variance_age =  1934.78513885
+        variance_distance = 1207587.8548734
+        max_age = 191.87276
+        max_distance = 3000.
+        age_distance_polynomial_coefficients = [
+                1.350082937086441, -0.26385415, -0.07516542,  0.39197707, -0.15475392,
+            0.        , -0.13196083,  0.02481208, -0.        , -0.47570021]
+        
+        output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_rate'
+        
+        # check if the output dir exists. If not, create
+        if not os.path.exists(output_dir):
+            print('{} does not exist, creating now... '.format(output_dir))
+            os.mkdir(output_dir)
+
+        print('Generating predicted sedimentation rate grids...')
+
+        if use_all_cpus:
+        
+            # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
+            if isinstance(use_all_cpus, bool):
+                try:
+                    num_cpus = multiprocessing.cpu_count()
+                except NotImplementedError:
+                    num_cpus = 1
+            # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
+            elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
+                num_cpus = use_all_cpus
+            else:
+                raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
+            
+            try:
+                # Split the workload across the CPUs.
+                pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
+                pool_map_async_result = pool.map_async(
+                        generate_predicted_sedimentation_grid_parallel_pool_function,
                         (
-                            time,
-                            predict_sedimentation_script,
-                            scale_sedimentation_rate,
-                            mean_age,
-                            mean_distance,
-                            variance_age,
-                            variance_distance,
-                            max_age,
-                            max_distance,
-                            age_distance_polynomial_coefficients,
-                            output_dir
-                        ) for time in times
-                    ),
-                    1) # chunksize
+                            (
+                                time,
+                                predict_sedimentation_script,
+                                scale_sedimentation_rate,
+                                mean_age,
+                                mean_distance,
+                                variance_age,
+                                variance_distance,
+                                max_age,
+                                max_distance,
+                                age_distance_polynomial_coefficients,
+                                output_dir
+                            ) for time in times
+                        ),
+                        1) # chunksize
 
-            # Apparently if we use pool.map_async instead of pool.map and then get the results
-            # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-            # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-            pool_map_async_result.get(999999)
-        except KeyboardInterrupt:
-            # Note: 'finally' block below gets executed before returning.
-            pass
-        finally:
-            pool.close()
-            pool.join()
+                # Apparently if we use pool.map_async instead of pool.map and then get the results
+                # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+                # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+                pool_map_async_result.get(999999)
+            except KeyboardInterrupt:
+                # Note: 'finally' block below gets executed before returning.
+                pass
+            finally:
+                pool.close()
+                pool.join()
 
-    else:
-        for time in times:
-            generate_predicted_sedimentation_grid(
-                    time,
-                    predict_sedimentation_script, scale_sedimentation_rate,
-                    mean_age, mean_distance,
-                    variance_age, variance_distance,
-                    max_age, max_distance,
-                    age_distance_polynomial_coefficients,
-                    output_dir)
+        else:
+            for time in times:
+                generate_predicted_sedimentation_grid(
+                        time,
+                        predict_sedimentation_script, scale_sedimentation_rate,
+                        mean_age, mean_distance,
+                        variance_age, variance_distance,
+                        max_age, max_distance,
+                        age_distance_polynomial_coefficients,
+                        output_dir)
     
     #
     # Predict sediment *thickness* results in "sediment_thick_v5.ipynb" from:
@@ -358,82 +363,83 @@ if __name__ == '__main__':
     #     print('Polynomial feature names:', regressor.named_steps['poly'].get_feature_names())
     #
     #
-
-    # updated for GlobSed and TRUNK agegrids (NW 20220826)
-    predict_sedimentation_script = 'predict_sediment_thickness.py'
-    scale_sedimentation_rate = None  # No scaling - we're predicting sediment thickness (not rate).
-    mean_age =  61.18406823
-    mean_distance = 1835.28118479
-    variance_age = 1934.6999014
-    variance_distance = 1207521.8995806
-    max_age = 191.87276
-    max_distance = 3000.
-    age_distance_polynomial_coefficients = [
-            5.441401190368497,  0.46893096, -0.07320928, -0.24077496, -0.10840657,
-        0.00381672,  0.06831728,  0.01179914,  0.01158149, -0.39880562]
-    
-    output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_thickness'
-
-    # check if the output dir exists. If not, create
-    if not os.path.exists(output_dir):
-        print('{} does not exist, creating now... '.format(output_dir))
-        os.mkdir(output_dir)
-    print('Generating predicted sediment thickness grids...')
-
-    if use_all_cpus:
-    
-        # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
-        if isinstance(use_all_cpus, bool):
-            try:
-                num_cpus = multiprocessing.cpu_count()
-            except NotImplementedError:
-                num_cpus = 1
-        # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
-        elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
-            num_cpus = use_all_cpus
-        else:
-            raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
+    if generate_sediment_thickness_grids:
         
-        try:
-            # Split the workload across the CPUs.
-            pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
-            pool_map_async_result = pool.map_async(
-                    generate_predicted_sedimentation_grid_parallel_pool_function,
-                    (
+        # updated for GlobSed and TRUNK agegrids (NW 20220826)
+        predict_sedimentation_script = 'predict_sediment_thickness.py'
+        scale_sedimentation_rate = None  # No scaling - we're predicting sediment thickness (not rate).
+        mean_age =  61.18406823
+        mean_distance = 1835.28118479
+        variance_age = 1934.6999014
+        variance_distance = 1207521.8995806
+        max_age = 191.87276
+        max_distance = 3000.
+        age_distance_polynomial_coefficients = [
+                5.441401190368497,  0.46893096, -0.07320928, -0.24077496, -0.10840657,
+            0.00381672,  0.06831728,  0.01179914,  0.01158149, -0.39880562]
+
+        output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_thickness'
+
+        # check if the output dir exists. If not, create
+        if not os.path.exists(output_dir):
+            print('{} does not exist, creating now... '.format(output_dir))
+            os.mkdir(output_dir)
+        print('Generating predicted sediment thickness grids...')
+
+        if use_all_cpus:
+
+            # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
+            if isinstance(use_all_cpus, bool):
+                try:
+                    num_cpus = multiprocessing.cpu_count()
+                except NotImplementedError:
+                    num_cpus = 1
+            # else 'use_all_cpus' is a positive integer specifying the number of CPUs to use...
+            elif isinstance(use_all_cpus, int) and use_all_cpus > 0:
+                num_cpus = use_all_cpus
+            else:
+                raise TypeError('use_all_cpus: {} is neither a bool nor a positive integer'.format(use_all_cpus))
+            
+            try:
+                # Split the workload across the CPUs.
+                pool = multiprocessing.Pool(num_cpus, initializer=low_priority)
+                pool_map_async_result = pool.map_async(
+                        generate_predicted_sedimentation_grid_parallel_pool_function,
                         (
-                            time,
-                            predict_sedimentation_script,
-                            scale_sedimentation_rate,
-                            mean_age,
-                            mean_distance,
-                            variance_age,
-                            variance_distance,
-                            max_age,
-                            max_distance,
-                            age_distance_polynomial_coefficients,
-                            output_dir
-                        ) for time in times
-                    ),
-                    1) # chunksize
+                            (
+                                time,
+                                predict_sedimentation_script,
+                                scale_sedimentation_rate,
+                                mean_age,
+                                mean_distance,
+                                variance_age,
+                                variance_distance,
+                                max_age,
+                                max_distance,
+                                age_distance_polynomial_coefficients,
+                                output_dir
+                            ) for time in times
+                        ),
+                        1) # chunksize
 
-            # Apparently if we use pool.map_async instead of pool.map and then get the results
-            # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
-            # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-            pool_map_async_result.get(999999)
-        except KeyboardInterrupt:
-            # Note: 'finally' block below gets executed before returning.
-            pass
-        finally:
-            pool.close()
-            pool.join()
+                # Apparently if we use pool.map_async instead of pool.map and then get the results
+                # using a timeout, then we avoid a bug in Python where a keyboard interrupt does not work properly.
+                # See http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+                pool_map_async_result.get(999999)
+            except KeyboardInterrupt:
+                # Note: 'finally' block below gets executed before returning.
+                pass
+            finally:
+                pool.close()
+                pool.join()
 
-    else:
-        for time in times:
-            generate_predicted_sedimentation_grid(
-                    time,
-                    predict_sedimentation_script, scale_sedimentation_rate,
-                    mean_age, mean_distance,
-                    variance_age, variance_distance,
-                    max_age, max_distance,
-                    age_distance_polynomial_coefficients,
-                    output_dir)
+        else:
+            for time in times:
+                generate_predicted_sedimentation_grid(
+                        time,
+                        predict_sedimentation_script, scale_sedimentation_rate,
+                        mean_age, mean_distance,
+                        variance_age, variance_distance,
+                        max_age, max_distance,
+                        age_distance_polynomial_coefficients,
+                        output_dir)
