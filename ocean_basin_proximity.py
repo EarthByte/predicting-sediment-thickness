@@ -31,11 +31,9 @@ import os
 # Try importing 'ptt' first. If that fails then try 'gplately.ptt' (GPlately now contains PlateTectonicTools).
 try:
     from ptt.utils.call_system_command import call_system_command
-    import ptt.utils.points_in_polygons as points_in_polygons
     import ptt.utils.proximity_query as proximity_query
 except ImportError:
     from gplately.ptt.utils.call_system_command import call_system_command
-    import gplately.ptt.utils.points_in_polygons as points_in_polygons
     import gplately.ptt.utils.proximity_query as proximity_query
 import pygplates
 from scipy.spatial import KDTree
@@ -63,11 +61,7 @@ class CpuProfile(object):
             self.time_usage_read_input_data = 0.0
             self.time_usage_reconstruct_and_calculate_distances = 0.0
             self.time_usage_read_age_grid = 0.0
-            self.time_usage_topology_resolve_time_step = 0.0
-            self.time_usage_topology_reconstruct_time_step = 0.0
-            self.time_usage_topology_reconstruct_time_step_deactivate = 0.0
-            self.time_usage_topology_reconstruct_time_step_find_polygons = 0.0
-            self.time_usage_topology_reconstruct_time_step_stage_rotations = 0.0
+            self.time_usage_topology_reconstruct_time_steps = 0.0
             self.time_usage_reconstruct_proximity = 0.0
             self.time_usage_calculate_distances = 0.0
             self.time_usage_obstacle_reconstruct_resolve = 0.0
@@ -145,42 +139,14 @@ class CpuProfile(object):
         if self.enable_profiling:
             self.time_usage_reconstruct_time_step += self.profile() - self.time_snapshot_start_reconstruct_time_step
     
-    def start_topology_resolve_time_step(self):
+    def start_topology_reconstruct_time_steps(self):
+        """Call at the start of topology_reconstruct_time_steps()."""
         if self.enable_profiling:
-            self.time_snapshot_start_topology_resolve_time_step = self.profile()
-    def end_topology_resolve_time_step(self):
+            self.time_snapshot_start_topology_reconstruct_time_steps = self.profile()
+    def end_topology_reconstruct_time_steps(self):
+        """Call at the end of topology_reconstruct_time_steps()."""
         if self.enable_profiling:
-            self.time_usage_topology_resolve_time_step += self.profile() - self.time_snapshot_start_topology_resolve_time_step
-    
-    def start_topology_reconstruct_time_step(self):
-        """Call at the start of topology_reconstruct_time_step()."""
-        if self.enable_profiling:
-            self.time_snapshot_start_topology_reconstruct_time_step = self.profile()
-    def end_topology_reconstruct_time_step(self):
-        """Call at the end of topology_reconstruct_time_step()."""
-        if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step
-    
-    def start_topology_reconstruct_time_step_deactivate(self):
-        if self.enable_profiling:
-            self.time_snapshot_start_topology_reconstruct_time_step_deactivate = self.profile()
-    def end_topology_reconstruct_time_step_deactivate(self):
-        if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step_deactivate += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_deactivate
-    
-    def start_topology_reconstruct_time_step_find_polygons(self):
-        if self.enable_profiling:
-            self.time_snapshot_start_topology_reconstruct_time_step_find_polygons = self.profile()
-    def end_topology_reconstruct_time_step_find_polygons(self):
-        if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step_find_polygons += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_find_polygons
-    
-    def start_topology_reconstruct_time_step_stage_rotations(self):
-        if self.enable_profiling:
-            self.time_snapshot_start_topology_reconstruct_time_step_stage_rotations = self.profile()
-    def end_topology_reconstruct_time_step_stage_rotations(self):
-        if self.enable_profiling:
-            self.time_usage_topology_reconstruct_time_step_stage_rotations += self.profile() - self.time_snapshot_start_topology_reconstruct_time_step_stage_rotations
+            self.time_usage_topology_reconstruct_time_steps += self.profile() - self.time_snapshot_start_topology_reconstruct_time_steps
     
 
     def start_write_proximity_data(self):
@@ -285,17 +251,13 @@ class CpuProfile(object):
             print(f"      Read input data: {self.time_usage_read_input_data * scale_to_seconds:.2f} seconds")
             print(f"      Reconstruct and calculate distances: {self.time_usage_reconstruct_and_calculate_distances * scale_to_seconds:.2f} seconds")
             print(f"        Read age grid: {self.time_usage_read_age_grid * scale_to_seconds:.2f} seconds")
+            print(f"        Topology reconstruct time steps: {self.time_usage_topology_reconstruct_time_steps * scale_to_seconds:.2f} seconds")
             print(f"        Reconstruct proximity: {self.time_usage_reconstruct_proximity * scale_to_seconds:.2f} seconds")
             print(f"        Calculate distances: {self.time_usage_calculate_distances * scale_to_seconds:.2f} seconds")
             print(f"          Obstacle reconstruct/resolve: {self.time_usage_obstacle_reconstruct_resolve * scale_to_seconds:.2f} seconds")
             print(f"          Obstacle create obstacle grids: {self.time_usage_create_obstacle_grids * scale_to_seconds:.2f} seconds")
             print(f"          Obstacle calculate distances: {self.time_usage_calculate_obstacle_distances * scale_to_seconds:.2f} seconds")
             print(f"        Reconstruct time steps: {self.time_usage_reconstruct_time_step * scale_to_seconds:.2f} seconds")
-            print(f"          Resolve topologies: {self.time_usage_topology_resolve_time_step * scale_to_seconds:.2f} seconds")
-            print(f"          Topology reconstruct time step: {self.time_usage_topology_reconstruct_time_step * scale_to_seconds:.2f} seconds")
-            print(f"            Topology reconstruct time step (deactivate): {self.time_usage_topology_reconstruct_time_step_deactivate * scale_to_seconds:.2f} seconds")
-            print(f"            Topology reconstruct time step (points in polygons): {self.time_usage_topology_reconstruct_time_step_find_polygons * scale_to_seconds:.2f} seconds")
-            print(f"            Topology reconstruct time step (stage rotations): {self.time_usage_topology_reconstruct_time_step_stage_rotations * scale_to_seconds:.2f} seconds")
             print(f"    WriteProximityData: {self.time_usage_write_proximity_data * scale_to_seconds:.2f} seconds")
             print(f"      Write xyz file: {self.time_usage_write_xyz_file * scale_to_seconds:.2f} seconds")
             print(f"      Write grd file from xyz: {self.time_usage_write_grd_file_from_xyz * scale_to_seconds:.2f} seconds")
@@ -491,116 +453,6 @@ def get_positions_and_ages(input_points, age_grid_filename):
         lon_lat_age_list.append((lon, lat, age))
     
     return lon_lat_age_list
-
-
-# Reconstruct points from 'time' to 'time + time_increment' using topologies.
-def topology_reconstruct_time_step(
-        ocean_basin_reconstruction,
-        time,
-        time_increment,
-        resolved_plate_boundaries,
-        resolved_plate_polygons,
-        rotation_model):
-    #
-    # The following code comment is the *slower* version of point-in-polygon testing.
-    #
-    
-    #    next_point_infos = []
-    #
-    #    for point_feature, point_begin_time, curr_recon_point in curr_point_infos:
-    #        plate_id = None
-    #        for resolved_plate_boundary in resolved_plate_boundaries:
-    #            resolved_plate_polygon = resolved_plate_boundary.get_resolved_boundary()
-    #            if resolved_plate_polygon.is_point_in_polygon(curr_recon_point):
-    #                plate_id = resolved_plate_boundary.get_feature().get_reconstruction_plate_id()
-    #                break
-    #         
-    #        if plate_id is None:
-    #            # Retire current point if falls outside a topological boundary, since we don't know how to move it.
-    #            # Shouldn't really happen unless falls in a gap somewhere in global topological plates.
-    #            continue
-    #        
-    #        # Get the stage rotation from 'time' to 'time + time_increment'.
-    #        stage_rotation = rotation_model.get_rotation(time + time_increment, plate_id, time)
-    #        next_recon_point = stage_rotation * curr_recon_point
-    #        
-    #        next_point_infos.append((point_feature, point_begin_time, next_recon_point))
-    #
-    #    return next_point_infos
-    
-    #
-    # The following code is the *faster* version of the above point-in-polygon code.
-    #
-
-    cpu_profile.start_topology_reconstruct_time_step()
-    cpu_profile.start_topology_reconstruct_time_step_deactivate()
-    
-    # Read OceanBasinReconstruction member variables into local variables.
-    point_ages = ocean_basin_reconstruction.point_ages
-    current_reconstructed_points = ocean_basin_reconstruction.current_reconstructed_points
-    current_point_indices = ocean_basin_reconstruction.current_point_indices
-
-    # Remove any reconstructed points that don't exist at 'time + time_increment'.
-    next_reconstructed_points = []
-    next_point_indices = []
-    for reconstructed_point_index, point_index in enumerate(current_point_indices):
-        # Retire current point if the time we are reconstructing to ('time + time_increment')
-        # is older (earlier than) than the point's time of appearance.
-        point_begin_time = point_ages[point_index]
-        if time + time_increment > point_begin_time:
-            continue
-
-        next_reconstructed_points.append(current_reconstructed_points[reconstructed_point_index])
-        next_point_indices.append(point_index)
-
-    current_reconstructed_points = next_reconstructed_points
-    current_point_indices = np.array(next_point_indices, dtype=int)  # numpy array uses less memory
-
-    cpu_profile.end_topology_reconstruct_time_step_deactivate()
-    
-    # If their are any active points then reconstruct them to the next time step.
-    if current_reconstructed_points:
-
-        cpu_profile.start_topology_reconstruct_time_step_find_polygons()
-        
-        # Find the polygon plates containing the points.
-        resolved_plate_boundaries_containing_points = points_in_polygons.find_polygons(
-                current_reconstructed_points,
-                resolved_plate_polygons,
-                resolved_plate_boundaries)
-
-        cpu_profile.end_topology_reconstruct_time_step_find_polygons()
-        cpu_profile.start_topology_reconstruct_time_step_stage_rotations()
-
-        # Cache the stage rotation associated with each resolved plate boundary.
-        stage_rotation_cache = {}
-
-        # Iterate over the point-in-polygon results.
-        for reconstructed_point_index, resolved_plate_boundary in enumerate(resolved_plate_boundaries_containing_points):
-            # If point is not within any resolved plate boundaries then don't move it.
-            if resolved_plate_boundary is None:
-                continue
-            
-            # Get the stage rotation from 'time' to 'time + time_increment'.
-            if resolved_plate_boundary in stage_rotation_cache:
-                stage_rotation = stage_rotation_cache[resolved_plate_boundary]
-            else:
-                # Only call these functions for a new resolved plate boundary (to reduce computations).
-                plate_id = resolved_plate_boundary.get_feature().get_reconstruction_plate_id()
-                stage_rotation = rotation_model.get_rotation(time + time_increment, plate_id, time)
-                # Cache stage rotation.
-                stage_rotation_cache[resolved_plate_boundary] = stage_rotation
-            
-            # Update the current reconstructed point position.
-            current_reconstructed_points[reconstructed_point_index] = stage_rotation * current_reconstructed_points[reconstructed_point_index]
-
-        cpu_profile.end_topology_reconstruct_time_step_stage_rotations()
-
-    # Write modified OceanBasinReconstruction member variables from local variables.
-    ocean_basin_reconstruction.current_reconstructed_points = current_reconstructed_points
-    ocean_basin_reconstruction.current_point_indices = current_point_indices
-    
-    cpu_profile.end_topology_reconstruct_time_step()
 
 
 def write_xyz_file(output_filename, output_data):
@@ -999,6 +851,12 @@ def proximity(
     An age grid paleo time will be missing from the dict if all input points are outside the associated age grid (in masked regions).
     """
     
+    # Make sure pygplates has support for TopologicalModel.
+    if pygplates.Version.get_imported_version() < pygplates.Version(30):
+        raise RuntimeError(
+            "Using pygplates version {} but use of TopologicalModel requires version 0.30 or greater".format(
+                pygplates.Version.get_imported_version()))
+    
     if time_increment <= 0:
         raise ValueError('The time increment "{}" is not positive and non-zero.'.format(time_increment))
     
@@ -1041,6 +899,7 @@ def proximity(
                     if feature.get_feature_type() in proximity_feature_types]
     
     topology_reconstruction_features = pygplates.FeaturesFunctionArgument(topological_reconstruction_filenames).get_features()
+    topological_model = pygplates.TopologicalModel(topology_reconstruction_features, rotation_model)
     
     if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
@@ -1053,35 +912,89 @@ def proximity(
 
     # Class to manage reconstruction data for ocean basin points associated with a specific age grid / paleo time.
     class OceanBasinReconstruction(object):
-        def __init__(self, lon_lat_age_list, age_grid_paleo_time):
+        def __init__(self, lon_lat_age_list, age_grid_paleo_time, topological_model, initial_time_index, time_increment, max_topological_reconstruction_time):
             self.age_grid_paleo_time = age_grid_paleo_time
             self.num_points = len(lon_lat_age_list)
 
-            # For each ocean basin point add lon-lat-point, time-of-appearance and initial-reconstructed-point to 3 separate lists.
+            # For each ocean basin point add lon-lat-point and time-of-appearance and initial-reconstructed-point to 3 separate lists.
             # The initial reconstructed point will be updated as the ocean basin points are topologically reconstructed back into time.
             # When a point is deactivated its entry is removed from 'current_reconstructed_points' and 'current_point_indices'
             # such that their lengths will decrease (possibly to zero if all points have been deactivated).
             point_lons = []
             point_lats = []
             point_ages = []
-            current_point_indices = []
-            current_reconstructed_points = []
-            for point_index, (lon, lat, age) in enumerate(lon_lat_age_list):
+            for lon, lat, age in lon_lat_age_list:
                 point_lons.append(lon)
                 point_lats.append(lat)
                 point_ages.append(age_grid_paleo_time + age)
-                current_point_indices.append(point_index)
-                current_reconstructed_points.append(pygplates.PointOnSphere(lat, lon))
             
             self.point_lons = np.array(point_lons, dtype=float)  # numpy array uses less memory
             self.point_lats = np.array(point_lats, dtype=float)  # numpy array uses less memory
             self.point_ages = np.array(point_ages, dtype=float)  # numpy array uses less memory
-            self.current_point_indices = np.array(current_point_indices, dtype=int)  # numpy array uses less memory
-            self.current_reconstructed_points = current_reconstructed_points
+
+            #
+            # Reconstruct points using topological model from the initial time to the largest (earliest)
+            # time of appearance of ocean basin points or the largest (earliest) reconstruction time
+            # supported by the topological model (if specified) - whichever is smaller.
+            #
+            initial_points = [pygplates.PointOnSphere(point_lats[point_index], point_lons[point_index])
+                              for point_index in range(self.num_points)]
+            initial_time = initial_time_index * time_increment
+            youngest_time = initial_time
+            oldest_time = max(point_ages)
+            # We cannot reconstruct further in the past than allowed by the topological reconstruction model.
+            if max_topological_reconstruction_time is not None:
+                oldest_time = min(oldest_time, max_topological_reconstruction_time)
+            # Make sure integral value (required for pygplates < 0.43).
+            oldest_time = math.ceil(oldest_time)
+            # Oldest  time shouldn't be smaller than youngest time.
+            oldest_time = max(oldest_time, youngest_time)
+            cpu_profile.start_topology_reconstruct_time_steps()
+            self.reconstructed_time_span = topological_model.reconstruct_geometry(
+                    initial_points,
+                    initial_time,
+                    oldest_time,
+                    youngest_time,
+                    time_increment)
+            cpu_profile.end_topology_reconstruct_time_steps()
+            
+            self.initial_reconstruction_time = initial_time
+            self.current_reconstruction_time_index = 0
+            self.time_increment = time_increment
+            
+            self.current_reconstructed_points, self.current_point_indices = self._get_current_reconstruction()
         
+        def reconstruct_time_step(self):
+            self.current_reconstruction_time_index += 1
+            self.current_reconstructed_points, self.current_point_indices = self._get_current_reconstruction()
+
         def is_active(self):
             # Return True if not all points have been deactivated.
             return bool(self.current_reconstructed_points)
+        
+        def _get_current_reconstruction(self):
+            current_reconstruction_time = self.initial_reconstruction_time + self.current_reconstruction_time_index * self.time_increment
+
+            current_reconstructed_points = self.reconstructed_time_span.get_geometry_points(
+                    current_reconstruction_time, return_inactive_points=True)
+            
+            active_age_grid_reconstructed_points = []
+            active_age_grid_point_indices = []
+
+            if current_reconstructed_points:
+                # Remove any reconstructed points that don't exist at the current reconstruction time according to the age grid.
+                for point_index, reconstructed_point in enumerate(current_reconstructed_points):
+                    if reconstructed_point is not None:
+                        # Retire current point if the time we are reconstructing to ('time + time_increment')
+                        # is older (earlier than) than the point's time of appearance.
+                        point_begin_time = self.point_ages[point_index]
+                        if current_reconstruction_time > point_begin_time:
+                            continue
+
+                        active_age_grid_reconstructed_points.append(reconstructed_point)
+                        active_age_grid_point_indices.append(point_index)
+            
+            return active_age_grid_reconstructed_points, np.array(active_age_grid_point_indices, dtype=int)
     
     # Dict mapping age grid paleo time to OceanBasinReconstruction.
     ocean_basin_reconstructions = {}
@@ -1095,6 +1008,7 @@ def proximity(
 
     # Iterate from the minimum paleo time (of all age grids) until all ocean basin point locations (for all age grids) have disappeared.
     time_index = int(math.ceil(unprocessed_age_grid_filenames_and_paleo_times[0][1] / time_increment))  # unprocessed age grids are sorted by paleo time
+
     while True:
         
         time = time_index * time_increment
@@ -1118,32 +1032,14 @@ def proximity(
             # If there are input points inside the age grid (in non-masked regions) then create an ocean basin reconstruction,
             # otherwise there will be no reconstruction associated with the current age grid.
             if lon_lat_age_list:
-                ocean_basin_reconstruction = OceanBasinReconstruction(lon_lat_age_list, age_grid_paleo_time)
+                ocean_basin_reconstruction = OceanBasinReconstruction(
+                        lon_lat_age_list,
+                        age_grid_paleo_time,
+                        topological_model,
+                        time_index,
+                        time_increment,
+                        max_topological_reconstruction_time)
                 del lon_lat_age_list  # free memory
-                
-                # If the age grid paleo time does not coincide with a time step then reconstruct from the former to the latter.
-                # This can happen if the time interval is larger than 1 Myr.
-                if time > age_grid_paleo_time:
-                    # Resolve our topological plate polygons at the age grid paleo time.
-                    resolved_plate_boundaries = []
-                    pygplates.resolve_topologies(
-                            topology_reconstruction_features,
-                            rotation_model,
-                            resolved_plate_boundaries,
-                            age_grid_paleo_time,
-                            resolve_topology_types=pygplates.ResolveTopologyType.boundary)
-                    resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
-                            for resolved_plate_boundary in resolved_plate_boundaries]
-                    # Reconstruct the current ocean basin points from 'age_grid_paleo_time' to 'time'.
-                    topology_reconstruct_time_step(
-                            ocean_basin_reconstruction,
-                            age_grid_paleo_time,
-                            time - age_grid_paleo_time,  # time increment
-                            resolved_plate_boundaries,
-                            resolved_plate_polygons,
-                            rotation_model)
-                    del resolved_plate_boundaries  # free memory
-                    #print('Reconstructed initial age grid {} to time {}'.format(age_grid_paleo_time, time))
                 
                 if ocean_basin_reconstruction.is_active():
                     # Add to the ocean basin reconstructions currently in progress.
@@ -1307,21 +1203,6 @@ def proximity(
         # Reconstruct to the next time unless we're already at the last time.
         if (max_topological_reconstruction_time is None or
             time <= max_topological_reconstruction_time):
-
-            cpu_profile.start_topology_resolve_time_step()
-            
-            # Resolve our topological plate polygons.
-            resolved_plate_boundaries = []
-            pygplates.resolve_topologies(
-                    topology_reconstruction_features,
-                    rotation_model,
-                    resolved_plate_boundaries,
-                    time,
-                    resolve_topology_types=pygplates.ResolveTopologyType.boundary)
-            resolved_plate_polygons = [resolved_plate_boundary.get_resolved_boundary()
-                    for resolved_plate_boundary in resolved_plate_boundaries]
-    
-            cpu_profile.end_topology_resolve_time_step()
             
             # Find the ocean basin points for the next time step.
             # We do this for each age grid currently being reconstructed.
@@ -1329,19 +1210,11 @@ def proximity(
                 ocean_basin_reconstruction = ocean_basin_reconstructions[age_grid_paleo_time]
                 # Reconstruct the current ocean basin points from 'time' to 'time + time_increment'.
                 # The reconstructed points will be the current points in the next time step.
-                topology_reconstruct_time_step(
-                        ocean_basin_reconstruction,
-                        time,
-                        time_increment,
-                        resolved_plate_boundaries,
-                        resolved_plate_polygons,
-                        rotation_model)
+                ocean_basin_reconstruction.reconstruct_time_step()
                 # If finished reconstructing ocean basin (for associated age grid) then remove from current reconstructions.
                 if not ocean_basin_reconstruction.is_active():
                     #print('Finished age grid {} at time {}'.    format(age_grid_paleo_time, time))
                     del ocean_basin_reconstructions[age_grid_paleo_time]
-    
-            del resolved_plate_boundaries  # free memory
     
         cpu_profile.end_reconstruct_time_step()
         
