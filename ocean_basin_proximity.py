@@ -891,7 +891,7 @@ def proximity(
     
     if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
-        shortest_path_grid = shortest_path.Grid(6)
+        shortest_path_grid = shortest_path.Grid(7)  # grid spacing of ~ 0.7 degrees
         obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
         #memory_profile.print_object_memory_usage(shortest_path_grid, 'shortest_path_grid')
     
@@ -1458,7 +1458,9 @@ def generate_and_write_proximity_data_parallel(
     # These are rough figures determined empirically by running this script (and using MemoryProfile).
     #
     # The base amount of memory usage per task (in GB) to set up for processing (excludes age-grid/ocean-basin reconstructions).
-    base_memory_usage_per_task_in_gb = 2.3
+    #
+    # Note: Each increment/decrement of subdivision depth in 'shortest_path.Grid' increases/decreases usage by ~0.5 GB.
+    base_memory_usage_per_task_in_gb = 2.8
     # The memory usage per age grid is roughly proportional to the number of input points,
     # with a uniform lon-lat grid at 1 degree resolution consuming about 6MB.
     delta_memory_usage_per_age_grid_in_gb = 6e-3 * len(input_points) / (180 * 360)
