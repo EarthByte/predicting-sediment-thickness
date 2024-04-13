@@ -938,7 +938,10 @@ def proximity(
                     initial_time=time,
                     oldest_time=time + time_increment,
                     youngest_time=time,
-                    time_increment=time_increment)
+                    time_increment=time_increment,
+                    # Disable collision detection since currently it's creating some artefacts along topological boundaries.
+                    # TODO: Improve collision detection in pyGPlates before enabling this...
+                    deactivate_points=None)
 
             # Extract the reconstructed points at 'time + time_increment'.
             # Any deactivated points will be None.
