@@ -27,10 +27,16 @@
 
 
 import argparse
-from ptt.utils.call_system_command import call_system_command
 import math
-import ptt.utils.points_spatial_tree as points_spatial_tree
-import ptt.utils.proximity_query as proximity_query
+# Try importing 'ptt' first. If that fails then try 'gplately.ptt' (GPlately now contains PlateTectonicTools).
+try:
+    from ptt.utils.call_system_command import call_system_command
+    import ptt.utils.points_spatial_tree as points_spatial_tree
+    import ptt.utils.proximity_query as proximity_query
+except ImportError:
+    from gplately.ptt.utils.call_system_command import call_system_command
+    import gplately.ptt.utils.points_spatial_tree as points_spatial_tree
+    import gplately.ptt.utils.proximity_query as proximity_query
 import pygplates
 import sys
 

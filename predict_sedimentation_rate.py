@@ -24,8 +24,13 @@
 
 
 import argparse
-from ptt.utils.call_system_command import call_system_command
 import math
+import numpy as np
+# Try importing 'ptt' first. If that fails then try 'gplately.ptt' (GPlately now contains PlateTectonicTools).
+try:
+    from ptt.utils.call_system_command import call_system_command
+except ImportError:
+    from gplately.ptt.utils.call_system_command import call_system_command
 import sys
 
 
@@ -63,7 +68,7 @@ def read_input_points(input_points_filename):
 
             input_points.append((lon, lat))
     
-    return input_points
+    return np.array(input_points)  # numpy array uses less memory
 
 
 def generate_input_points_grid(grid_spacing_degrees):
@@ -71,34 +76,36 @@ def generate_input_points_grid(grid_spacing_degrees):
     if grid_spacing_degrees == 0:
         return
     
-    input_points = []
-    
     # Data points start *on* dateline (-180).
     # If 180 is an integer multiple of grid spacing then final longitude also lands on dateline (+180).
     num_latitudes = int(math.floor(180.0 / grid_spacing_degrees)) + 1
     num_longitudes = int(math.floor(360.0 / grid_spacing_degrees)) + 1
+
+    input_points = np.full((num_latitudes * num_longitudes, 2), (0.0, 0.0), dtype=float)  # numpy array uses less memory
+    input_point_index = 0
     for lat_index in range(num_latitudes):
         lat = -90 + lat_index * grid_spacing_degrees
         
         for lon_index in range(num_longitudes):
             lon = -180 + lon_index * grid_spacing_degrees
             
-            input_points.append((lon, lat))
+            input_points[input_point_index] = (lon, lat)
+            input_point_index += 1
     
     return (input_points, num_longitudes, num_latitudes)
 
 
 # Returns a list of scalars (one per (lon, lat) point in the 'input_points' list).
 # For input points outside the scalar grid then scalars will be Nan (ie, 'math.isnan(scalar)' will return True).
-def get_positions_and_scalars(input_points, scalar_grid_filename, max_scalar=None):
+def get_ages_and_distances(input_points, age_grid_filename, distance_grid_filename, max_age=None, max_distance=None):
     
     input_points_data = ''.join('{0} {1}\n'.format(lon, lat) for lon, lat in input_points)
 
     # The command-line strings to execute GMT 'grdtrack'.
-    grdtrack_command_line = ["gmt", "grdtrack", "-G{0}".format(scalar_grid_filename)]
+    grdtrack_command_line = ["gmt", "grdtrack", "-G{0}".format(age_grid_filename), "-G{0}".format(distance_grid_filename)]
     stdout_data = call_system_command(grdtrack_command_line, stdin=input_points_data, return_stdout=True)
     
-    lon_lat_scalar_list = []
+    lon_lat_age_distance_list = []
     
     # Read lon, lat and scalar values from the output of 'grdtrack'.
     for line in stdout_data.splitlines():
@@ -112,35 +119,34 @@ def get_positions_and_scalars(input_points, scalar_grid_filename, max_scalar=Non
         if num_values == 0:
             continue
         
-        if num_values < 3:
-            print('Ignoring line "{0}" - has fewer than 3 white-space separated numbers.'.format(line), file=sys.stderr)
+        if num_values < 4:
+            print('Ignoring line "{0}" - has fewer than 4 white-space separated numbers.'.format(line), file=sys.stderr)
             continue
             
         try:
             # Convert strings to numbers.
             lon = float(line_data[0])
             lat = float(line_data[1])
-            
-            # The scalar got appended to the last column by 'grdtrack'.
-            scalar = float(line_data[-1])
-            
-            # If the point is outside the grid then the scalar grid will return 'NaN'.
-            if math.isnan(scalar):
-                #print('Ignoring line "{0}" - point is outside scalar grid.'.format(line), file=sys.stderr)
+            age = float(line_data[2])
+            distance = float(line_data[3])
+
+            # Exclude if either age or distance is NaN.
+            if math.isnan(age) or math.isnan(distance):
                 continue
             
-            # Clamp to max value if requested.
-            if (max_scalar is not None and
-                scalar > max_scalar):
-                scalar = max_scalar
+            # Clamp to max values if requested.
+            if max_age is not None and age > max_age:
+                age = max_age
+            if max_distance is not None and distance > max_distance:
+                distance = max_distance
             
         except ValueError:
-            print('Ignoring line "{0}" - cannot read floating-point lon, lat and scalar values.'.format(line), file=sys.stderr)
+            print('Ignoring line "{0}" - cannot read floating-point lon, lat, age and distance values.'.format(line), file=sys.stderr)
             continue
         
-        lon_lat_scalar_list.append((lon, lat, scalar))
+        lon_lat_age_distance_list.append((lon, lat, age, distance))
     
-    return lon_lat_scalar_list
+    return np.array(lon_lat_age_distance_list)  # numpy array uses less memory
 
 
 def write_xyz_file(output_filename, output_data):
@@ -151,19 +157,17 @@ def write_xyz_file(output_filename, output_data):
 
 def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes):
     
-    # The command-line strings to execute GMT 'nearneighbor'.
-    # For example "nearneighbor output_mean_distance.xy -R-180/180/-90/90 -I1 -N4 -S1d -Goutput_mean_distance.nc".
+    # The command-line strings to execute GMT 'xyz2grd'.
+    # For example "xyz2grd output_sedimentation_rate.xy -R-180/180/-90/90 -I1 -output_sedimentation_rate.nc".
     gmt_command_line = [
             "gmt",
-            "nearneighbor",
+            "xyz2grd",
             xyz_filename,
-            "-N4",
-            "-S{0}d".format(1.5 * grid_spacing),
             "-I{0}".format(grid_spacing),
-            "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
             # Use GMT gridline registration since our input point grid has data points on the grid lines.
             # Gridline registration is the default so we don't need to force pixel registration...
-            #"-r", # Force pixel registration since data points are at centre of cells.
+            # "-r", # Force pixel registration since data points are at centre of cells.
+            "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
             "-G{0}".format(grd_filename)]
     call_system_command(gmt_command_line)
 
@@ -213,19 +217,7 @@ def predict_sedimentation(
     """
     
     # Get the input point ages and mean distances to passive continental margins.
-    lon_lat_age_list = get_positions_and_scalars(input_points, age_grid_filename, max_age)
-    lon_lat_distance_list = get_positions_and_scalars(input_points, distance_grid_filename, max_distance)
-    if not lon_lat_age_list or not lon_lat_distance_list:
-        return
-    
-    # Merge the age and distance lists.
-    # Only keep points where there are age *and* distance values.
-    lon_lat_age_distance_list = []
-    age_dict = dict(((lon, lat), age) for lon, lat, age in lon_lat_age_list)
-    for lon, lat, distance in lon_lat_distance_list:
-        if (lon, lat) in age_dict:
-            age = age_dict[(lon, lat)]
-            lon_lat_age_distance_list.append((lon, lat, age, distance))
+    lon_lat_age_distance_array = get_ages_and_distances(input_points, age_grid_filename, distance_grid_filename, max_age, max_distance)
     
     #
     # Calculate mean/variance statistics on the age/distance data.
@@ -236,12 +228,12 @@ def predict_sedimentation(
     #sum_square_ages = 0
     #sum_distances = 0
     #sum_square_distances = 0
-    #for lon, lat, age, distance in lon_lat_age_distance_list:
+    #for lon, lat, age, distance in lon_lat_age_distance_array:
     #    sum_ages += age
     #    sum_square_ages += age * age
     #    sum_distances += distance
     #    sum_square_distances += distance * distance
-    #num_age_distance_points = len(lon_lat_age_distance_list)
+    #num_age_distance_points = len(lon_lat_age_distance_array)
     #mean_age = sum_ages / num_age_distance_points
     #mean_distance = sum_distances / num_age_distance_points
     #variance_age = (sum_square_ages / num_age_distance_points) - (mean_age * mean_age)
@@ -251,18 +243,20 @@ def predict_sedimentation(
     std_deviation_distance = math.sqrt(variance_distance)
     
     # For each ocean basin point predict average sedimentation rate.
-    lon_lat_average_sedimentation_rate_list = []
-    lon_lat_sediment_thickness_list = []
-    for lon, lat, age, distance in lon_lat_age_distance_list:
+    lon_lat_average_sedimentation_rate_array = np.full((len(lon_lat_age_distance_array), 3), (0.0, 0.0, 0.0), dtype=float)  # numpy array uses less memory
+    point_index = 0
+    for lon, lat, age, distance in lon_lat_age_distance_array:
         
         predicted_sedimentation_rate = sedimentation_rate_scale * predict_sedimentation_rate(
                 age, distance,
                 mean_age, mean_distance,
                 std_deviation_age, std_deviation_distance,
                 age_distance_polynomial_coefficients)
-        lon_lat_average_sedimentation_rate_list.append((lon, lat, predicted_sedimentation_rate))
+        
+        lon_lat_average_sedimentation_rate_array[point_index] = (lon, lat, predicted_sedimentation_rate)
+        point_index += 1
     
-    return lon_lat_average_sedimentation_rate_list
+    return lon_lat_average_sedimentation_rate_array
     
     
 def write_sediment_data(
@@ -294,6 +288,8 @@ def write_sediment_data(
 
 if __name__ == '__main__':
     
+    import traceback
+    
     __description__ = \
     """Find the average sedimentation rate (metres / million years) at ocean basin point locations.
     
@@ -313,126 +309,136 @@ if __name__ == '__main__':
     python %(prog)s -d distance.grd -g age_grid.nc -i 1 -w -- sediment
      """
     
-    # The command-line parser.
-    parser = argparse.ArgumentParser(description = __description__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    
-    parser.add_argument('-d', '--distance_grid_filename', type=str, required=True,
-            metavar='distance_grid_filename',
-            help='The distance grid filename containing the mean distances, to passive continental margins, of each '
-                'ocean basin point (reconstructed from its time of appearance to the paleo time of the age grid).')
-    parser.add_argument('-g', '--age_grid_filename', type=str, required=True,
-            metavar='age_grid_filename',
-            help='The age grid filename used to find the age of each ocean basin point.')
-    parser.add_argument('-w', '--output_grd_file', action='store_true',
-            help='Also generate a grd file. '
-                'By default only an xyz file is written. '
-                'Can only be specified if "ocean_basin_points_filename" is not specified '
-                '(ie, ocean basin points must be on a uniform lon/lat grid).')
-    
-    parser.add_argument('-i', '--ocean_basin_grid_spacing', type=float,
-            help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
-                'The grid point latitudes/longitudes are offset by half the grid spacing '
-                '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
-                'Can only be specified if "ocean_basin_points_filename" is not specified. '
-                'Defaults to {0} degrees.'.format(
-                        DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
-    
-    parser.add_argument('-s', '--sedimentation_rate_scale', type=float, default=1.0,
-            metavar='sedimentation_rate_scale',
-            help='Scale factor to apply to predicted sedimentation rate to convert it to metres/My. '
-                'For example, if predicated rate has units cm/Ky then set the scale factor to 10. '
-                'Defaults to no scaling (1.0).')
-    
-    parser.add_argument('-m', '--mean_age_distance', type=float, nargs=2, required=True,
-            metavar=('mean_age', 'mean_distance'),
-            help='The mean of age and distance as two consecutive values. '
-                'These values come from the machine learning training scaler and are used to '
-                'remove the mean (for age and distance).')
-    parser.add_argument('-v', '--variance_age_distance', type=float, nargs=2, required=True,
-            metavar=('variance_age', 'variance_distance'),
-            help='The variance of age and distance as two consecutive values. '
-                'These values come from the machine learning training scaler and are used to '
-                'scale to unit variance (for age and distance).')
-    parser.add_argument('-x', '--clamp_age_distance', type=float, nargs=2, default=None,
-            metavar=('max_age', 'max_distance'),
-            help='Optional maximum of age and distance as two consecutive values. '
-                'These values come from the machine learning training stage and are used to clamp the '
-                'age and distance (because values above these are not represented well in trained data). '
-                'Defaults to no clamping (of age or distance).')
-    parser.add_argument('-f', '--age_distance_polynomial_coefficients', type=float, nargs=10, required=True,
-            metavar=('constant', 'age', 'distance', 'age*age', 'age*distance', 'distance*distance',
-                    'age*age*age', 'age*age*distance', 'age*distance*distance', 'distance*distance*distance'),
-            help='The polynomial coefficients used to predict sedimentation rate from age and distance. '
-                'There should be ten consecutive values representing the polynomial features: '
-                'constant, age, distance, age*age, age*distance, distance*distance, age*age*age, age*age*distance, '
-                'age*distance*distance and distance*distance*distance. '
-                'These values come from the machine learning training scaler.')
-    
-    def parse_unicode(value_string):
-        #try:
-        #    # Filename uses the system encoding - decode from 'str' to 'unicode'.
-        #    filename = value_string.decode(sys.getfilesystemencoding())
-        #except UnicodeDecodeError:
-        #    raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
+    try:
+        # The command-line parser.
+        parser = argparse.ArgumentParser(description = __description__, formatter_class=argparse.RawDescriptionHelpFormatter)
         
-        #return filename
-        return value_string
+        parser.add_argument('-d', '--distance_grid_filename', type=str, required=True,
+                metavar='distance_grid_filename',
+                help='The distance grid filename containing the mean distances, to passive continental margins, of each '
+                    'ocean basin point (reconstructed from its time of appearance to the paleo time of the age grid).')
+        parser.add_argument('-g', '--age_grid_filename', type=str, required=True,
+                metavar='age_grid_filename',
+                help='The age grid filename used to find the age of each ocean basin point.')
+        parser.add_argument('-w', '--output_grd_file', action='store_true',
+                help='Also generate a grd file. '
+                    'By default only an xyz file is written. '
+                    'Can only be specified if "ocean_basin_points_filename" is not specified '
+                    '(ie, ocean basin points must be on a uniform lon/lat grid).')
+        
+        parser.add_argument('-i', '--ocean_basin_grid_spacing', type=float,
+                help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
+                    'The grid point latitudes/longitudes are offset by half the grid spacing '
+                    '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
+                    'Can only be specified if "ocean_basin_points_filename" is not specified. '
+                    'Defaults to {0} degrees.'.format(
+                            DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
+        
+        parser.add_argument('-s', '--sedimentation_rate_scale', type=float, default=1.0,
+                metavar='sedimentation_rate_scale',
+                help='Scale factor to apply to predicted sedimentation rate to convert it to metres/My. '
+                    'For example, if predicated rate has units cm/Ky then set the scale factor to 10. '
+                    'Defaults to no scaling (1.0).')
+        
+        parser.add_argument('-m', '--mean_age_distance', type=float, nargs=2, required=True,
+                metavar=('mean_age', 'mean_distance'),
+                help='The mean of age and distance as two consecutive values. '
+                    'These values come from the machine learning training scaler and are used to '
+                    'remove the mean (for age and distance).')
+        parser.add_argument('-v', '--variance_age_distance', type=float, nargs=2, required=True,
+                metavar=('variance_age', 'variance_distance'),
+                help='The variance of age and distance as two consecutive values. '
+                    'These values come from the machine learning training scaler and are used to '
+                    'scale to unit variance (for age and distance).')
+        parser.add_argument('-x', '--clamp_age_distance', type=float, nargs=2, default=None,
+                metavar=('max_age', 'max_distance'),
+                help='Optional maximum of age and distance as two consecutive values. '
+                    'These values come from the machine learning training stage and are used to clamp the '
+                    'age and distance (because values above these are not represented well in trained data). '
+                    'Defaults to no clamping (of age or distance).')
+        parser.add_argument('-f', '--age_distance_polynomial_coefficients', type=float, nargs=10, required=True,
+                metavar=('constant', 'age', 'distance', 'age*age', 'age*distance', 'distance*distance',
+                        'age*age*age', 'age*age*distance', 'age*distance*distance', 'distance*distance*distance'),
+                help='The polynomial coefficients used to predict sedimentation rate from age and distance. '
+                    'There should be ten consecutive values representing the polynomial features: '
+                    'constant, age, distance, age*age, age*distance, distance*distance, age*age*age, age*age*distance, '
+                    'age*distance*distance and distance*distance*distance. '
+                    'These values come from the machine learning training scaler.')
+        
+        def parse_unicode(value_string):
+            #try:
+            #    # Filename uses the system encoding - decode from 'str' to 'unicode'.
+            #    filename = value_string.decode(sys.getfilesystemencoding())
+            #except UnicodeDecodeError:
+            #    raise argparse.ArgumentTypeError("Unable to convert filename %s to unicode" % value_string)
+            
+            #return filename
+            return value_string
 
-    parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
-            metavar='ocean_basin_points_filename',
-            help='Optional input xy file containing the ocean basin point locations. '
-                'If not specified then a uniform lon/lat grid of points is generated. '
-                'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_file" are not specified.')
-    
-    parser.add_argument('output_filename_prefix', type=parse_unicode,
-            metavar='output_filename_prefix',
-            help='The output xy filename prefix used in all output filenames.')
-    parser.add_argument('-e', '--output_filename_extension', type=str, default='xy',
-            metavar='output_filename_extension',
-            help='The output xy filename extension. Defaults to "xy".')
-    
-    # Parse command-line options.
-    args = parser.parse_args()
-    
-    if args.ocean_basin_points_filename is not None:
-        if args.ocean_basin_grid_spacing is not None:
-            raise argparse.ArgumentTypeError(
-                "'ocean_basin_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
-        if args.output_grd_file is not None:
-            raise argparse.ArgumentTypeError(
-                "'output_grd_file' and 'ocean_basin_points_filename' cannot both be specified.")
-    
-    # Get the input points.
-    if args.ocean_basin_points_filename is not None:
-        input_points = read_input_points(args.ocean_basin_points_filename)
-    else:
-        if args.ocean_basin_grid_spacing is None:
-            args.ocean_basin_grid_spacing = DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES
-        input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
-    
-    if input_points is None:
-        sys.exit(1)
-    
-    average_sedimentation_rate_data = predict_sedimentation(
-            input_points,
-            args.age_grid_filename,
-            args.distance_grid_filename,
-            args.mean_age_distance[0], # mean_age
-            args.mean_age_distance[1], # mean_distance
-            args.variance_age_distance[0], # variance_age
-            args.variance_age_distance[1], # variance_distance
-            args.age_distance_polynomial_coefficients,
-            args.clamp_age_distance[0] if args.clamp_age_distance is not None else None, # max_age
-            args.clamp_age_distance[1] if args.clamp_age_distance is not None else None, # max_distance
-            args.sedimentation_rate_scale)
+        parser.add_argument('ocean_basin_points_filename', type=parse_unicode, nargs='?',
+                metavar='ocean_basin_points_filename',
+                help='Optional input xy file containing the ocean basin point locations. '
+                    'If not specified then a uniform lon/lat grid of points is generated. '
+                    'Can only be specified if "ocean_basin_grid_spacing" and "output_grd_file" are not specified.')
+        
+        parser.add_argument('output_filename_prefix', type=parse_unicode,
+                metavar='output_filename_prefix',
+                help='The output xy filename prefix used in all output filenames.')
+        parser.add_argument('-e', '--output_filename_extension', type=str, default='xy',
+                metavar='output_filename_extension',
+                help='The output xy filename extension. Defaults to "xy".')
+        
+        # Parse command-line options.
+        args = parser.parse_args()
+        
+        if args.ocean_basin_points_filename is not None:
+            if args.ocean_basin_grid_spacing is not None:
+                raise argparse.ArgumentTypeError(
+                    "'ocean_basin_grid_spacing' and 'ocean_basin_points_filename' cannot both be specified.")
+            if args.output_grd_file is not None:
+                raise argparse.ArgumentTypeError(
+                    "'output_grd_file' and 'ocean_basin_points_filename' cannot both be specified.")
+        
+        # Get the input points.
+        if args.ocean_basin_points_filename is not None:
+            input_points = read_input_points(args.ocean_basin_points_filename)
+        else:
+            if args.ocean_basin_grid_spacing is None:
+                args.ocean_basin_grid_spacing = DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES
+            input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
+        
+        if input_points is None:
+            sys.exit(1)
+        
+        average_sedimentation_rate_data = predict_sedimentation(
+                input_points,
+                args.age_grid_filename,
+                args.distance_grid_filename,
+                args.mean_age_distance[0], # mean_age
+                args.mean_age_distance[1], # mean_distance
+                args.variance_age_distance[0], # variance_age
+                args.variance_age_distance[1], # variance_distance
+                args.age_distance_polynomial_coefficients,
+                args.clamp_age_distance[0] if args.clamp_age_distance is not None else None, # max_age
+                args.clamp_age_distance[1] if args.clamp_age_distance is not None else None, # max_distance
+                args.sedimentation_rate_scale)
 
-    if average_sedimentation_rate_data is None:
+        if average_sedimentation_rate_data is None:
+            sys.exit(1)
+        
+        write_sediment_data(
+                average_sedimentation_rate_data,
+                args.output_filename_prefix,
+                args.output_filename_extension,
+                (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_file else None)
+        
+        sys.exit(0)
+    
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:
+        print('ERROR: {0}'.format(exc), file=sys.stderr)
+        # Uncomment this to print traceback to location of raised exception.
+        #traceback.print_exc()
+        
         sys.exit(1)
-    
-    write_sediment_data(
-            average_sedimentation_rate_data,
-            args.output_filename_prefix,
-            args.output_filename_extension,
-            (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_file else None)
-    
-    sys.exit(0)

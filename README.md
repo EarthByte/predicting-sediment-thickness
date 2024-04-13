@@ -7,9 +7,22 @@ To generate sediment thickness and rate grids through time, all that is required
 ## Dependencies
 
 You'll also need to install the following Python dependencies:
-* [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools)
+* [NumPy](https://numpy.org/)
+* [SciPy](https://scipy.org/)
 * [Generic Mapping Tools (GMT) ](https://www.generic-mapping-tools.org/)
+* [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools), or [GPlately](https://github.com/GPlates/gplately) (which now contains PlateTectonicTools).
 * And, on Windows platforms, optionally install [psutil](https://pypi.org/project/psutil/) so that this workflow can use CPU cores in the *background* (ie, below-normal priority).
+
+
+You can install these with conda:
+
+```
+conda create -n <conda-environment> -c conda-forge numpy scipy gmt platetectonictools
+conda activate <conda-environment>
+```
+
+...where `<conda-environment>` should be replaced with the name of your conda environment.
+
 
 ## Releases
 ### v1.1
@@ -24,27 +37,43 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 
 - Download paleo-age grids and associated topologies.
     - The latest plate model and paleo-age grids can be downloaded from [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
-    - Alternatively, Müller et al. (2016; AREPS) can be downloaded from https://www.earthbyte.org/webdav/ftp/Data_Collections/Muller_etal_2016_AREPS/
+    - Alternatively, Müller et al. (2016; AREPS) can be downloaded from [here](https://www.earthbyte.org/webdav/ftp/Data_Collections/Muller_etal_2016_AREPS/)
 - Open the `01_generate_distance_grids.py` script and:
-    + Set the `data_dir` variable to the location of all your files (agegrids, topologies, etc)
-    + Set the `agegrid_dir` variable to the location of the downloaded age grids.
-    + Set the `agegrid_filename` and `agegrid_filename_ext` to correspond to the filename of the agegrids themselves, and the extension.
-    + Set the `topology_dir` variable to the location of the downloaded topologies.
-    + Set the `rotation_filenames` and `topology_filenames` to match those in the topology_dir.
-    + Set the `grid_spacing` variable to your desired spacing in degrees, e.g.  1:
-         * This takes about 8 hours on a 6-core (12-thread) system.
-    + Open the script *ocean_basin_proximity.py* and set the *data_dir* and *coastline_filename* to match those in the model you're using.
+    + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate distance grids.
+    + Set the `age_grid_filenames_format` variable to the location/filenames of the downloaded age grids.
+      + Note: This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
+    + Set the `data_dir` variable to the location of all your topological files.
+    + Set the `rotation_filenames` and `topology_filenames` variables to match those in the `data_dir`.
+    + Set the `max_topological_reconstruction_time` variable to oldest age supported by the topological model (eg, 250, 410, or 1000).
+    + Set the `anchor_plate_id` variable to the reference frame in which to generate the distance grids.
+      + Note: The age grids must also be in this reference frame.
+    + Set the `proximity_features_files` variable to the passive margin files (that distances are calculated relative to).
+      + Note: These can be passive margins generated from *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).
+    + Set the `continent_obstacle_files` variable to the continent files (obstacles to water flow).
+      + The shortest distance (from ocean points to passive margins) must go around the continents (ie, water flows around continents).
+      + This can be `None` to just use the minimum straight-line distance to passive margins (ignoring continent obstacles).
+      + Note: These can be *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).
+    + Set the `grid_spacing` variable to the desired grid spacing (in degrees, e.g.  0.1) of the generated distance grids.
+      + The output distance grids are upscaled from the grid spacing used internally for computations (`internal_grid_spacing`).
+    + Set the `internal_grid_spacing` variable to grid spacing (in degrees) used for internal distance computations.
+      + Note: This parameter significantly affects the time it takes to generate distance grids in this workflow.
+    + Set the `use_all_cpus` variable to the number of CPU cores to use (eg, False, True or a specific number).
+    + Set the `max_memory_usage_in_gb` variable to the amount of memory (in GB) to use.
+      + For example, set it to the amount of physical RAM (or less if running other workflows simultaneously).
 - Run the Python script:
       `python 01_generate_distance_grids.py`
     + The script outputs mean distance grids:
         + Have units in metres.
-        + Are located in *distances_${grid_spacing}d*. (or what you've named your output folder)
+        + Are located in *distances_`<grid_spacing>`d* (unles you've changed your output folder with `output_dir`).
     
     
 - Open the `02_generate_predicted_sedimentation_grids.py` script and:
-    + Set the `agegrid_dir`, `agegrid_filename`, and agegrid_filename_ext` variables to correspond to the paleo-age grids directory.
-    + Set the `distance_grid_dir` variable to the location of the generated distance grids from part 1.
-    + Specify the `grid_spacing` and time range variables.
+    + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate sedimentation grids.
+    + Set the `age_grid_filenames_format` variable to the location/filenames of the downloaded age grids.
+      + Note: This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
+    + Set the `distance_grid_spacing` variable to equal the `grid_spacing` variable used to generate the distance grids in part 1.
+    + Set the `grid_spacing` variable to your desired spacing in degrees (of the output sedimentation grids).
+    + Set the `use_all_cpus` variable to the number of CPU cores to use (eg, False, True or a specific number).
 - Run the Python script:
     `python 02_generate_predicted_sedimentation_grids.py`
     + The script outputs predicted decompacted sedimentation rate grids:
