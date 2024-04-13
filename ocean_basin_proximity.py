@@ -1462,7 +1462,9 @@ def generate_and_write_proximity_data_parallel(
     #
     # The base amount of memory usage per task (in GB) to set up for processing (excludes age-grid/ocean-basin reconstructions).
     #
-    # Note: Each increment/decrement of subdivision depth in 'shortest_path.Grid' increases/decreases usage by ~0.5 GB.
+    # Note: A subdivision depth (in 'shortest_path.Grid') of 7 increases usage (over 6) by ~0.5 GB, and
+    #       each increment of subdivision depth further increases usage by a multiple of 4.
+    #       This value includes usage for a subdivision depth of 6.
     base_memory_usage_per_task_in_gb = 2.3
     # The memory usage per age grid is roughly proportional to the number of input points,
     # with a uniform lon-lat grid at 1 degree resolution consuming about 6MB.

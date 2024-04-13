@@ -2,7 +2,9 @@
 
 This workflow generates **compacted sediment thickness** and **decompacted sediment rate** grids for palaeo-times using polynomials of ocean floor age and distance to passive margins. The polynomial relationship is calibrated to present day and can be updated with new datasets if needed (see [below](#calculating-the-relationships-for-sedimentation-rate-and-thickness) for more information).
 
-To generate sediment thickness and rate grids through time, all that is required is a GPlates-compatible plate motion model (specifically: rotation file(s), topology (or dynamic polgyon) file(s), and passive continental margin locations (COBs), and corresponding paleo-age grids. The latest plate model and time-evolving seafloor age grids can be downloaded [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
+To generate sediment thickness and rate grids through time, all that is required is a GPlates-compatible plate motion model (specifically: rotation file(s), topology (or dynamic polgyon) file(s), and passive continental margin locations (COBs), and corresponding paleo-age grids. The latest plate model and time-evolving seafloor age grids can be downloaded [here](https://www.earthbyte.org/gplates-2-4-software-and-data-sets/).
+
+> __Note:__ Currently you may notice artefacts in the mean-distance and sedimentation grids, such as alternating stripes, that are caused by non-optimal reconstruction of ocean basin points using the topological model. We plan to improve this in the future (by improving the collision detection of ocean basin points with topological plates and networks in pyGPlates).
 
 ## Dependencies
 
@@ -11,6 +13,7 @@ You'll also need to install the following Python dependencies:
 * [SciPy](https://scipy.org/)
 * [Generic Mapping Tools (GMT) ](https://www.generic-mapping-tools.org/)
 * [PlateTectonicTools](https://github.com/EarthByte/PlateTectonicTools), or [GPlately](https://github.com/GPlates/gplately) (which now contains PlateTectonicTools).
+* [PyGPlates](https://www.gplates.org/) version 0.30 or above (also is a dependency of `PlateTectonicTools` and `GPlately`).
 * And, on Windows platforms, optionally install [psutil](https://pypi.org/project/psutil/) so that this workflow can use CPU cores in the *background* (ie, below-normal priority).
 
 
@@ -25,6 +28,17 @@ conda activate <conda-environment>
 
 
 ## Releases
+### v2.0
+This release significantly __reduces__ running time and memory usage.
+
+Other changes include:
+- Can generate costly distance grids faster using a lower internal resolution (eg, 1 degree).
+  - Then upscale to a higher resolution (eg, 0.1 degrees).
+- Can specify maximum memory usage (to avoid out-of-memory crashes).
+- Input parameters easier to configure.
+  - Eg, specifying age grid filename format (where time is in the filename and how many decimal places).
+- Can specify a non-zero reference frame (eg, if age grids are in a non-zero mantle frame).
+
 ### v1.1
 This release contains the sediment thickness workflow with an updated calibration for sediment thickness and rate using [GlobSed](https://ngdc.noaa.gov/mgg/sedthick/) sediment thickness [(Straume et al. 2019)](https://doi.org/10.1029/2018GC008115) and age grid from 'Muller-2019-Young2019-Cao2020' in the [GPlates 2.3 sample data](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/) [(Zahirovic et al. 2022)](https://doi.org/10.1002/gdj3.146)
 
@@ -36,7 +50,7 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 ## Workflow procedure
 
 - Download paleo-age grids and associated topologies.
-    - The latest plate model and paleo-age grids can be downloaded from [here](https://www.earthbyte.org/gplates-2-3-software-and-data-sets/).
+    - The latest plate model and paleo-age grids can be downloaded from [here](https://www.earthbyte.org/gplates-2-4-software-and-data-sets/).
     - Alternatively, Müller et al. (2016; AREPS) can be downloaded from [here](https://www.earthbyte.org/webdav/ftp/Data_Collections/Muller_etal_2016_AREPS/)
 - Open the `01_generate_distance_grids.py` script and:
     + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate distance grids.
