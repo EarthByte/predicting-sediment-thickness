@@ -795,7 +795,9 @@ class ProximityData(object):
             # Calculate a standard deviation proximity over time for each ocean basin point.
             mean_proximity = self.sum_proximities[valid_stats_mask] / self.num_proximities[valid_stats_mask]
             standard_deviation_proximity = np.sqrt(
-                    (self.sum_square_proximities[valid_stats_mask] / self.num_proximities[valid_stats_mask]) - (mean_proximity * mean_proximity))
+                    # Ensure >= 0 since numerical precision can result in a slightly negative value (when standard deviation is zero)...
+                    np.maximum((self.sum_square_proximities[valid_stats_mask] / self.num_proximities[valid_stats_mask]) - (mean_proximity * mean_proximity),
+                               0.0))
 
             # Ensure not negative due to numerical precision (ie, sqrt(negative_number)).
             standard_deviation_proximity[np.isnan(standard_deviation_proximity)] = 0.0
