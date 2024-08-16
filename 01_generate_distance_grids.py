@@ -125,7 +125,7 @@ max_topological_reconstruction_time = 250  # can be None to just use age grid as
 clamp_mean_proximity_kms = 3000
 
 # Output directory name.
-output_dir = '{}/distances_{}d'.format(output_base_dir, grid_spacing)
+output_dir = '{}/distances_{:.1f}d'.format(output_base_dir, grid_spacing)
 
 # ------------------------------------------
 # END USER INPUT
@@ -206,7 +206,10 @@ def generate_distance_grids(times):
     # Output a "mean" (over all reconstruction times) distance grid.
     command_line.append('--output_mean_distance')
 
-    # Generate a grd (".nc") file for each xyz file.
+    # Don't output "standard deviation" (over all reconstruction times) distance grid.
+    #command_line.append('--output_std_dev_distance')
+
+    # Generate grd (".nc") files instead of xyz (".xy") files.
     command_line.append('--output_grd_files')
 
     if use_all_cpus:
@@ -230,36 +233,11 @@ def generate_distance_grids(times):
     if max_memory_usage_in_gb:
         command_line.extend(['--max_memory_usage', '{}'.format(max_memory_usage_in_gb)])
 
-    # Distance grids output filename prefix.
-    command_line.append('{}/distance_{}'.format(output_dir, grid_spacing))
+    # Distance grids output directory.
+    command_line.append(output_dir)
     
     #print(' '.join(command_line))
     call_system_command(command_line)
-    
-
-    #
-    # Rename the mean distance grids ('.nc') so that they start with 'mean_distance', and so that 'time' is at the end
-    # of the base filename (this way we can import them as time-dependent raster into GPlates version 2.0 and earlier).
-    #
-    # Also remove mean distance '.xy' files.
-    #
-    
-    for time in times:
-        src_mean_distance_basename = '{}/distance_{}_{:.1f}_mean_distance'.format(output_dir, grid_spacing, time)
-        dst_mean_distance_basename = '{}/mean_distance_{}d_{:.1f}'.format(output_dir, grid_spacing, time)
-        
-        # Rename '.nc' files.
-        src_mean_distance_grid = src_mean_distance_basename + '.nc'
-        dst_mean_distance_grid = dst_mean_distance_basename + '.nc'
-        if os.access(dst_mean_distance_grid, os.R_OK):
-            os.remove(dst_mean_distance_grid)
-        if os.path.exists(src_mean_distance_grid):
-            os.rename(src_mean_distance_grid, dst_mean_distance_grid)
-        
-        # Remove '.xy' files.
-        src_mean_distance_xy = src_mean_distance_basename + '.xy'
-        if os.access(src_mean_distance_xy, os.R_OK):
-            os.remove(src_mean_distance_xy)
 
 
 if __name__ == '__main__':

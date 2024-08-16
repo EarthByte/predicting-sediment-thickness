@@ -67,7 +67,7 @@ grid_spacing = 0.1            # grid spacing of output sedimentation grids
 
 # Distance grid files (from part 1)
 #     The "{}" parts are substituted here now (in this str.format() call) whereas the escaped "{{...}}" part is subsituted later (with each 'time').
-distance_grid_filenames_format = '{0}/distances_{1}d/mean_distance_{1}d_{{:.1f}}.nc'.format(output_base_dir, distance_grid_spacing)
+distance_grid_filenames_format = '{0}/distances_{1:.1f}d/mean_distance_{1:.1f}d_{{:.1f}}.nc'.format(output_base_dir, distance_grid_spacing)
 
 # Output directory name.
 sediment_output_sub_dir = 'sedimentation_output'
@@ -86,9 +86,9 @@ age_grid_filenames_format = '/Users/nickywright/Data/Age/Muller2019-Young2019-Ca
 
 
 # check if the base output directory exists. If it doesn't, create it.
-if not os.path.exists(output_base_dir + '/' + sediment_output_sub_dir):
-    print('{} does not exist, creating now... '.format(output_base_dir + '/' + sediment_output_sub_dir))
-    os.mkdir(output_base_dir + '/' + sediment_output_sub_dir)
+if not os.path.exists(os.path.join(output_base_dir, sediment_output_sub_dir)):
+    print('{} does not exist, creating now... '.format(os.path.join(output_base_dir, sediment_output_sub_dir)))
+    os.mkdir(os.path.join(output_base_dir, sediment_output_sub_dir))
 
 
 # ----- 
@@ -103,7 +103,7 @@ def generate_predicted_sedimentation_grid(
         max_age,
         max_distance,
         age_distance_polynomial_coefficients,
-        output_dir):
+        output_file_basename_prefix):
     
     py_cmd='python3'
     if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
@@ -135,9 +135,11 @@ def generate_predicted_sedimentation_grid(
         command_line.extend([
                 '-s',
                 str(scale_sedimentation_rate)])
+    
+    output_filename_prefix = '{}_{:.1f}'.format(output_file_basename_prefix, time)
     command_line.extend([
             '--',
-            '{}/sed_{}_{:.1f}'.format(output_dir, grid_spacing, time)])
+            output_filename_prefix])
     
     #print('Time:', time)
     #print(command_line)
@@ -146,38 +148,6 @@ def generate_predicted_sedimentation_grid(
     
     # Execute the command.
     call_system_command(command_line)
-    
-    #
-    # Rename the sedimentation rate and thickness grids ('.nc') so that they start with 'sed_rate' and 'sed_thick', and so that 'time' is at the end
-    # of the base filename (this way we can import them as time-dependent raster into GPlates version 2.0 and earlier).
-    #
-    # Also remove '.xy' files.
-    #
-
-    def rename_nc_and_remove_xy(src_basename, dst_basename):
-
-        # Rename '.nc' files.
-        src_grid = src_basename + '.nc'
-        dst_grid = dst_basename + '.nc'
-        if os.access(dst_grid, os.R_OK):
-            os.remove(dst_grid)
-        if os.path.exists(src_grid):
-            os.rename(src_grid, dst_grid)
-        
-        # Remove '.xy' files.
-        src_xy = src_basename + '.xy'
-        if os.access(src_xy, os.R_OK):
-            os.remove(src_xy)
-    
-    # Sedimentation rate grids.
-    src_sed_rate_basename = '{}/sed_{}_{:.1f}_sed_rate'.format(output_dir, grid_spacing, time)
-    dst_sed_rate_basename = '{}/sed_rate_{}d_{:.1f}'.format(output_dir, grid_spacing, time)
-    rename_nc_and_remove_xy(src_sed_rate_basename, dst_sed_rate_basename)
-    
-    # Sedimentation thickness grids.
-    src_sed_thick_basename = '{}/sed_{}_{:.1f}_sed_thick'.format(output_dir, grid_spacing, time)
-    dst_sed_thick_basename = '{}/sed_thick_{}d_{:.1f}'.format(output_dir, grid_spacing, time)
-    rename_nc_and_remove_xy(src_sed_thick_basename, dst_sed_thick_basename)
 
 
 # Wraps around 'generate_predicted_sedimentation_grid()' so can be used by multiprocessing.Pool.map()
@@ -280,7 +250,8 @@ if __name__ == '__main__':
                 1.350082937086441, -0.26385415, -0.07516542,  0.39197707, -0.15475392,
             0.        , -0.13196083,  0.02481208, -0.        , -0.47570021]
         
-        output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_rate'
+        output_dir = os.path.join(output_base_dir, sediment_output_sub_dir, 'predicted_rate')
+        output_file_basename_prefix = os.path.join(output_dir, 'sed_rate_{:.1f}d'.format(grid_spacing))
         
         # check if the output dir exists. If not, create
         if not os.path.exists(output_dir):
@@ -320,7 +291,7 @@ if __name__ == '__main__':
                                 max_age,
                                 max_distance,
                                 age_distance_polynomial_coefficients,
-                                output_dir
+                                output_file_basename_prefix
                             ) for time in times
                         ),
                         1) # chunksize
@@ -345,7 +316,7 @@ if __name__ == '__main__':
                         variance_age, variance_distance,
                         max_age, max_distance,
                         age_distance_polynomial_coefficients,
-                        output_dir)
+                        output_file_basename_prefix)
     
     #
     # Predict sediment *thickness* results in "sediment_thick_v5.ipynb" from:
@@ -378,7 +349,8 @@ if __name__ == '__main__':
                 5.441401190368497,  0.46893096, -0.07320928, -0.24077496, -0.10840657,
             0.00381672,  0.06831728,  0.01179914,  0.01158149, -0.39880562]
 
-        output_dir = output_base_dir + '/' + sediment_output_sub_dir + '/predicted_thickness'
+        output_dir = os.path.join(output_base_dir, sediment_output_sub_dir, 'predicted_thickness')
+        output_file_basename_prefix = os.path.join(output_dir, 'sed_thick_{:.1f}d'.format(grid_spacing))
 
         # check if the output dir exists. If not, create
         if not os.path.exists(output_dir):
@@ -417,7 +389,7 @@ if __name__ == '__main__':
                                 max_age,
                                 max_distance,
                                 age_distance_polynomial_coefficients,
-                                output_dir
+                                output_file_basename_prefix
                             ) for time in times
                         ),
                         1) # chunksize
@@ -442,4 +414,4 @@ if __name__ == '__main__':
                         variance_age, variance_distance,
                         max_age, max_distance,
                         age_distance_polynomial_coefficients,
-                        output_dir)
+                        output_file_basename_prefix)

@@ -26,16 +26,13 @@
 import argparse
 import math
 import numpy as np
+import os
 # Try importing 'ptt' first. If that fails then try 'gplately.ptt' (GPlately now contains PlateTectonicTools).
 try:
     from ptt.utils.call_system_command import call_system_command
 except ImportError:
     from gplately.ptt.utils.call_system_command import call_system_command
 import sys
-
-
-# Default grid spacing (in degrees) when generating uniform lon/lat spacing of ocean basin points.
-DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES = 1
 
 
 # Reads the input xy file and returns a list of (lon, lat) points.
@@ -154,22 +151,28 @@ def write_xyz_file(output_filename, output_data):
         for output_line in output_data:
             output_file.write(' '.join(str(item) for item in output_line) + '\n')
 
+    #print('..generated: {}'.format(os.path.basename(output_filename)))
 
-def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, num_grid_longitudes, num_grid_latitudes):
+
+def write_grd_file(grd_filename, output_data, grid_spacing, num_grid_longitudes, num_grid_latitudes):
+
+    # Convert array to a string for standard-input to GMT.
+    xyz_data = ''.join('{} {} {}\n'.format(lon, lat, scalar) for lon, lat, scalar in output_data)
     
     # The command-line strings to execute GMT 'xyz2grd'.
     # For example "xyz2grd output_sedimentation_rate.xy -R-180/180/-90/90 -I1 -output_sedimentation_rate.nc".
     gmt_command_line = [
             "gmt",
             "xyz2grd",
-            xyz_filename,
             "-I{0}".format(grid_spacing),
             # Use GMT gridline registration since our input point grid has data points on the grid lines.
             # Gridline registration is the default so we don't need to force pixel registration...
             # "-r", # Force pixel registration since data points are at centre of cells.
             "-R{0}/{1}/{2}/{3}".format(-180, 180, -90, 90),
             "-G{0}".format(grd_filename)]
-    call_system_command(gmt_command_line)
+    call_system_command(gmt_command_line, stdin=xyz_data)
+
+    #print('..generated: {}'.format(os.path.basename(grd_filename)))
 
 
 def predict_sedimentation_rate(
@@ -262,28 +265,25 @@ def predict_sedimentation(
 def write_sediment_data(
         average_sedimentation_rate_data,
         output_filename_prefix,
-        output_filename_extension,
         output_grd_file = None):
     
-    average_sedimentation_rate_suffix = 'sed_rate'
-    
-    # Write average sedimentation rate XYZ file.
-    average_sedimentation_rate_xyz_filename = '{0}_{1}.{2}'.format(
-            output_filename_prefix, average_sedimentation_rate_suffix, output_filename_extension)
-    
-    write_xyz_file(average_sedimentation_rate_xyz_filename, average_sedimentation_rate_data)
-    
-    # Write average sedimentation rate GRD file.
+    # Write average sedimentation rate grd (".nc") file or xyz (".xy") file.
     if output_grd_file:
+
         grid_spacing, num_grid_longitudes, num_grid_latitudes = output_grd_file
         
-        average_sedimentation_rate_grd_filename = '{0}_{1}.nc'.format(
-                output_filename_prefix, average_sedimentation_rate_suffix)
+        average_sedimentation_rate_grd_filename = '{}.nc'.format(output_filename_prefix)
         
-        write_grd_file_from_xyz(
+        write_grd_file(
                 average_sedimentation_rate_grd_filename,
-                average_sedimentation_rate_xyz_filename,
+                average_sedimentation_rate_data,
                 grid_spacing, num_grid_longitudes, num_grid_latitudes)
+    
+    else:
+
+        average_sedimentation_rate_xyz_filename = '{}.xy'.format(output_filename_prefix)
+        
+        write_xyz_file(average_sedimentation_rate_xyz_filename, average_sedimentation_rate_data)
 
 
 if __name__ == '__main__':
@@ -298,15 +298,15 @@ if __name__ == '__main__':
     eg, for a 1 degree spacing the latitudes are -90, -89, ..., 90). If an input xy file is specified then it can contain
     arbitrary (lon, lat) point locations (it can also contain extra 3rd, 4th, etc, columns but they are ignored).
     
-    By default a single 'xy' file containing average sedimentation rates is output.
-    An optional 'grd' can also be output (see the '-w' option)
+    By default a single '.xy' file containing average sedimentation rates is output.
+    Alternatively, a '.nc' grid file can be output (see the '-w' option)
     
     If an ocean basin point falls outside the age grid or the distance grid then it is ignored.
 
     NOTE: Separate the positional and optional arguments with '--' (workaround for bug in argparse module).
     For example...
 
-    python %(prog)s -d distance.grd -g age_grid.nc -i 1 -w -- sediment
+    python %(prog)s -d distance.grd -g age_grid.nc -i 1 -w -- sediment_rate
      """
     
     try:
@@ -321,7 +321,7 @@ if __name__ == '__main__':
                 metavar='age_grid_filename',
                 help='The age grid filename used to find the age of each ocean basin point.')
         parser.add_argument('-w', '--output_grd_file', action='store_true',
-                help='Also generate a grd file. '
+                help='Generate a grid file (".nc") instead of an xyz file (".xy"). '
                     'By default only an xyz file is written. '
                     'Can only be specified if "ocean_basin_points_filename" is not specified '
                     '(ie, ocean basin points must be on a uniform lon/lat grid).')
@@ -330,9 +330,7 @@ if __name__ == '__main__':
                 help='The grid spacing (in degrees) of ocean basin points in lon/lat space. '
                     'The grid point latitudes/longitudes are offset by half the grid spacing '
                     '(eg, for a 1 degree spacing the latitudes are -89.5, -88.5, ..., 89.5). '
-                    'Can only be specified if "ocean_basin_points_filename" is not specified. '
-                    'Defaults to {0} degrees.'.format(
-                            DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES))
+                    'Can only be specified if "ocean_basin_points_filename" is not specified.')
         
         parser.add_argument('-s', '--sedimentation_rate_scale', type=float, default=1.0,
                 metavar='sedimentation_rate_scale',
@@ -383,10 +381,7 @@ if __name__ == '__main__':
         
         parser.add_argument('output_filename_prefix', type=parse_unicode,
                 metavar='output_filename_prefix',
-                help='The output xy filename prefix used in all output filenames.')
-        parser.add_argument('-e', '--output_filename_extension', type=str, default='xy',
-                metavar='output_filename_extension',
-                help='The output xy filename extension. Defaults to "xy".')
+                help='The output filename prefix (minus filename extension).')
         
         # Parse command-line options.
         args = parser.parse_args()
@@ -398,13 +393,14 @@ if __name__ == '__main__':
             if args.output_grd_file is not None:
                 raise argparse.ArgumentTypeError(
                     "'output_grd_file' and 'ocean_basin_points_filename' cannot both be specified.")
+        else:  # args.ocean_basin_points_filename not specified...
+            if args.ocean_basin_grid_spacing is None:
+                raise argparse.ArgumentTypeError("'ocean_basin_grid_spacing' must be specified if 'ocean_basin_points_filename' is not specified.")
         
         # Get the input points.
         if args.ocean_basin_points_filename is not None:
             input_points = read_input_points(args.ocean_basin_points_filename)
         else:
-            if args.ocean_basin_grid_spacing is None:
-                args.ocean_basin_grid_spacing = DEFAULT_GRID_INPUT_POINTS_GRID_SPACING_DEGREES
             input_points, num_grid_longitudes, num_grid_latitudes = generate_input_points_grid(args.ocean_basin_grid_spacing)
         
         if input_points is None:
@@ -429,7 +425,6 @@ if __name__ == '__main__':
         write_sediment_data(
                 average_sedimentation_rate_data,
                 args.output_filename_prefix,
-                args.output_filename_extension,
                 (args.ocean_basin_grid_spacing, num_grid_longitudes, num_grid_latitudes) if args.output_grd_file else None)
         
         sys.exit(0)

@@ -146,7 +146,7 @@ class CpuProfile(object):
 
             self.time_usage_write_proximity_data = 0.0
             self.time_usage_write_xyz_file = 0.0
-            self.time_usage_write_grd_file_from_xyz = 0.0
+            self.time_usage_write_grd_file = 0.0
             self.time_usage_upscaled_mask_generate_input_points = 0.0
             self.time_usage_calculate_upscaled_mask_interpolation_params = 0.0
             self.time_usage_upscaled_sample_age_grid = 0.0
@@ -167,12 +167,12 @@ class CpuProfile(object):
         if self.enable_profiling:
             self.time_usage_write_xyz_file += self.profile() - self.time_snapshot_start_write_xyz_file
     
-    def start_write_grd_file_from_xyz(self):
+    def start_write_grd_file(self):
         if self.enable_profiling:
-            self.time_snapshot_start_write_grd_file_from_xyz = self.profile()
-    def end_write_grd_file_from_xyz(self):
+            self.time_snapshot_start_write_grd_file = self.profile()
+    def end_write_grd_file(self):
         if self.enable_profiling:
-            self.time_usage_write_grd_file_from_xyz += self.profile() - self.time_snapshot_start_write_grd_file_from_xyz
+            self.time_usage_write_grd_file += self.profile() - self.time_snapshot_start_write_grd_file
     
     def start_upscaled_mask_generate_input_points(self):
         if self.enable_profiling:
@@ -249,7 +249,7 @@ class CpuProfile(object):
             print(f"        Reconstruct time steps: {self.time_usage_reconstruct_time_step * scale_to_seconds:.2f} seconds")
             print(f"    WriteProximityData: {self.time_usage_write_proximity_data * scale_to_seconds:.2f} seconds")
             print(f"      Write xyz file: {self.time_usage_write_xyz_file * scale_to_seconds:.2f} seconds")
-            print(f"      Write grd file from xyz: {self.time_usage_write_grd_file_from_xyz * scale_to_seconds:.2f} seconds")
+            print(f"      Write grd file: {self.time_usage_write_grd_file * scale_to_seconds:.2f} seconds")
             print(f"      Generate upscaled mask input points: {self.time_usage_upscaled_mask_generate_input_points * scale_to_seconds:.2f} seconds")
             print(f"      Get upscaled mask interpolation parameters: {self.time_usage_calculate_upscaled_mask_interpolation_params * scale_to_seconds:.2f} seconds")
             print(f"        Sample age grid at upscaled grid spacing: {self.time_usage_upscaled_sample_age_grid * scale_to_seconds:.2f} seconds")
@@ -453,9 +453,14 @@ def write_xyz_file(output_filename, output_data):
     
     cpu_profile.end_write_xyz_file()
 
+    #print('..generated: {}'.format(os.path.basename(output_filename)))
 
-def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearneighbor = True):
-    cpu_profile.start_write_grd_file_from_xyz()
+
+def write_grd_file(grd_filename, output_data, grid_spacing, use_nearneighbor = True):
+    cpu_profile.start_write_grd_file()
+
+    # Convert array to a string for standard-input to GMT.
+    xyz_data = ''.join('{} {} {}\n'.format(lon, lat, scalar) for lon, lat, scalar in output_data)
     
     if use_nearneighbor:
         # The command-line strings to execute GMT 'nearneighbor'.
@@ -463,7 +468,6 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearne
         gmt_command_line = [
                 "gmt",
                 "nearneighbor",
-                xyz_filename,
                 "-N4+m2", # Divide search radius into 4 sectors but only require values in 2 sectors.
                 "-S{}d".format(1.5 * grid_spacing), # Search radius is a larger multiple the grid spacing.
                 "-I{}".format(grid_spacing),
@@ -478,7 +482,6 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearne
         gmt_command_line = [
                 "gmt",
                 "xyz2grd",
-                xyz_filename,
                 "-I{}".format(grid_spacing),
                 # Use GMT gridline registration since our input point grid has data points on the grid lines.
                 # Gridline registration is the default so we don't need to force pixel registration...
@@ -486,9 +489,11 @@ def write_grd_file_from_xyz(grd_filename, xyz_filename, grid_spacing, use_nearne
                 "-R{}/{}/{}/{}".format(-180, 180, -90, 90),
                 "-G{}".format(grd_filename)]
     
-    call_system_command(gmt_command_line)
+    call_system_command(gmt_command_line, stdin=xyz_data)
 
-    cpu_profile.end_write_grd_file_from_xyz()
+    cpu_profile.end_write_grd_file()
+
+    #print('..generated: {}'.format(os.path.basename(grd_filename)))
 
 
 def calculate_upscaled_mask_interpolation_params(src_lon_lats, src_grid_spacing, upscaled_lon_lats_string, age_grid_filename):
@@ -692,6 +697,8 @@ def write_upscaled_grd_file(grd_filename, scalars, upscaled_lon_lat_indices_weig
             stdin=upscaled_xyz_data)
     
     cpu_profile.end_write_upscaled_grd_file()
+
+    #print('..generated: {}'.format(os.path.basename(grd_filename)))
 
 
 # Class to hold all proximity data for a specific age grid paleo time.
@@ -1214,8 +1221,7 @@ def proximity(
 def write_proximity_data(
         proximity_datas,
         age_grid_filenames_and_paleo_times,
-        output_filename_prefix,
-        output_filename_extension,
+        output_directory,
         output_distance_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
@@ -1247,16 +1253,21 @@ def write_proximity_data(
 
             for time in proximity_data.get_times():
 
-                xyz_filename = '{}_{:.1f}_{:.1f}.{}'.format(output_filename_prefix, age_grid_paleo_time, time, output_filename_extension)
-                write_xyz_file(xyz_filename, proximity_data.get_time_data(time))
+                time_data = proximity_data.get_time_data(time)
 
-                if output_grd_files:
-                    grd_filename = '{}_{:.1f}_{:.1f}.nc'.format(output_filename_prefix, age_grid_paleo_time, time)
+                if output_grd_files:  # write the grid file...
+
                     ocean_basin_grid_spacing, _ = output_grd_files
-                    write_grd_file_from_xyz(
-                            grd_filename, xyz_filename, ocean_basin_grid_spacing,
+                    grd_filename = os.path.join(output_directory, 'distance_{:.1f}d_{:.1f}_{:.1f}.nc'.format(ocean_basin_grid_spacing, age_grid_paleo_time, time))
+                    write_grd_file(
+                            grd_filename, time_data, ocean_basin_grid_spacing,
                             # Using reconstructed points (which are *not* grid-aligned) so need to use nearest neighbour filtering...
                             use_nearneighbor=True)
+                
+                else:  # write the xyz file...
+
+                    xyz_filename = os.path.join(output_directory, 'distance_{:.1f}_{:.1f}.xy'.format(age_grid_paleo_time, time))
+                    write_xyz_file(xyz_filename, time_data)
 
         # If we're outputting mean and/or standard deviation grids, and if upscaling has been enabled.
         if output_mean_distance or output_standard_deviation_distance:
@@ -1274,54 +1285,62 @@ def write_proximity_data(
         if output_mean_distance:
 
             means = proximity_data.get_means()
-
-            # Write the xyz file.
-            xyz_mean_distance_filename = '{}_{:.1f}_mean_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
-            # An array of (lon, lat, mean).
-            xyz_mean_data = np.column_stack((mean_standard_deviation_lon_lats, means))
-            write_xyz_file(xyz_mean_distance_filename, xyz_mean_data)
             
-            # Write the grid file.
-            if output_grd_files:
-                grd_mean_distance_filename = '{}_{:.1f}_mean_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
+            if output_grd_files:  # write the grid file...
+
                 ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
                 if upscale_mean_std_dev_grid_spacing is not None:
+                    grd_mean_distance_filename = os.path.join(output_directory, 'mean_distance_{:.1f}d_{:.1f}.nc'.format(upscale_mean_std_dev_grid_spacing, age_grid_paleo_time))
                     write_upscaled_grd_file(
                             grd_mean_distance_filename,
                             means,
                             upscaled_masked_lon_lat_indices_weights,
                             upscale_mean_std_dev_grid_spacing)
                 else:
-                    write_grd_file_from_xyz(
-                            grd_mean_distance_filename, xyz_mean_distance_filename, ocean_basin_grid_spacing,
+                    grd_mean_distance_filename = os.path.join(output_directory, 'mean_distance_{:.1f}d_{:.1f}.nc'.format(ocean_basin_grid_spacing, age_grid_paleo_time))
+                    # An array of (lon, lat, mean).
+                    xyz_mean_data = np.column_stack((mean_standard_deviation_lon_lats, means))
+                    write_grd_file(
+                            grd_mean_distance_filename, xyz_mean_data, ocean_basin_grid_spacing,
                             # Using original (grid-aligned) points so don't near nearest neighbour filtering...
                             use_nearneighbor=False)
+            
+            else:  # write the xyz file...
+
+                xyz_mean_distance_filename = os.path.join(output_directory, 'mean_distance_{:.1f}.xy'.format(age_grid_paleo_time))
+                # An array of (lon, lat, mean).
+                xyz_mean_data = np.column_stack((mean_standard_deviation_lon_lats, means))
+                write_xyz_file(xyz_mean_distance_filename, xyz_mean_data)
         
         if output_standard_deviation_distance:
 
             standard_deviations = proximity_data.get_standard_deviations()
 
-            # Write the xyz file.
-            xyz_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.{}'.format(output_filename_prefix, age_grid_paleo_time, output_filename_extension)
-            # An array of (lon, lat, standard_deviation).
-            xyz_standard_deviation_data = np.column_stack((mean_standard_deviation_lon_lats, standard_deviations))
-            write_xyz_file(xyz_standard_deviation_distance_filename, xyz_standard_deviation_data)
+            if output_grd_files:  # write the grid file...
 
-            # Write the grid file.
-            if output_grd_files:
-                grd_standard_deviation_distance_filename = '{}_{:.1f}_std_dev_distance.nc'.format(output_filename_prefix, age_grid_paleo_time)
                 ocean_basin_grid_spacing, upscale_mean_std_dev_grid_spacing = output_grd_files
                 if upscale_mean_std_dev_grid_spacing is not None:
+                    grd_standard_deviation_distance_filename = os.path.join(output_directory, 'std_dev_distance_{:.1f}d_{:.1f}.nc'.format(upscale_mean_std_dev_grid_spacing, age_grid_paleo_time))
                     write_upscaled_grd_file(
                             grd_standard_deviation_distance_filename,
                             standard_deviations,
                             upscaled_masked_lon_lat_indices_weights,
                             upscale_mean_std_dev_grid_spacing)
                 else:
-                    write_grd_file_from_xyz(
-                            grd_standard_deviation_distance_filename, xyz_standard_deviation_distance_filename, ocean_basin_grid_spacing,
+                    grd_standard_deviation_distance_filename = os.path.join(output_directory, 'std_dev_distance_{:.1f}d_{:.1f}.nc'.format(ocean_basin_grid_spacing, age_grid_paleo_time))
+                    # An array of (lon, lat, standard_deviation).
+                    xyz_standard_deviation_data = np.column_stack((mean_standard_deviation_lon_lats, standard_deviations))
+                    write_grd_file(
+                            grd_standard_deviation_distance_filename, xyz_standard_deviation_data, ocean_basin_grid_spacing,
                             # Using original (grid-aligned) points so don't near nearest neighbour filtering...
                             use_nearneighbor=False)
+            
+            else:  # write the xyz file...
+            
+                xyz_standard_deviation_distance_filename = os.path.join(output_directory, 'std_dev_distance_{:.1f}.xy'.format(age_grid_paleo_time))
+                # An array of (lon, lat, standard_deviation).
+                xyz_standard_deviation_data = np.column_stack((mean_standard_deviation_lon_lats, standard_deviations))
+                write_xyz_file(xyz_standard_deviation_distance_filename, xyz_standard_deviation_data)
     
     cpu_profile.end_write_proximity_data()
     
@@ -1342,8 +1361,7 @@ def generate_and_write_proximity_data(
         output_distance_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
-        output_filename_prefix,
-        output_filename_extension,
+        output_directory,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
@@ -1374,8 +1392,7 @@ def generate_and_write_proximity_data(
     write_proximity_data(
             proximity_datas,
             age_grid_filenames_and_paleo_times,
-            output_filename_prefix,
-            output_filename_extension,
+            output_directory,
             output_distance_with_time,
             output_mean_distance,
             output_standard_deviation_distance,
@@ -1431,8 +1448,7 @@ def generate_and_write_proximity_data_parallel(
         output_distance_with_time,
         output_mean_distance,
         output_standard_deviation_distance,
-        output_filename_prefix,
-        output_filename_extension,
+        output_directory,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
         anchor_plate_id = 0,
@@ -1556,8 +1572,7 @@ def generate_and_write_proximity_data_parallel(
                     output_distance_with_time,
                     output_mean_distance,
                     output_standard_deviation_distance,
-                    output_filename_prefix,
-                    output_filename_extension,
+                    output_directory,
                     max_topological_reconstruction_time,
                     continent_obstacle_filenames,
                     anchor_plate_id,
@@ -1584,8 +1599,7 @@ def generate_and_write_proximity_data_parallel(
                         output_distance_with_time,
                         output_mean_distance,
                         output_standard_deviation_distance,
-                        output_filename_prefix,
-                        output_filename_extension,
+                        output_directory,
                         max_topological_reconstruction_time,
                         continent_obstacle_filenames,
                         anchor_plate_id,
@@ -1631,12 +1645,15 @@ if __name__ == '__main__':
     If *not* specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
     
     The output (for each input age grid) can be any or all of the following:
-     1) For each time from the paleo time of the age grid to the maximum age of all ocean basin points (determined by the age grid) an output xyz file is
-        generated containing the reconstructed (lon, lat) point locations (as x,y) and the minimum distance to all proximity features (as z).
-     2) A single output xyz file is generated containing (lon, lat) ocean basin point locations (as x,y) (at the paleo time of the age grid) and
+     1) For each time from the paleo time of the age grid to the maximum age of all ocean basin points (determined by the age grid) an output ".xy" (or ".nc") file
+        is generated containing the reconstructed (lon, lat) point locations and the minimum distance to all proximity features.
+        See the '-d' option.
+     2) A single output ".xy" (or ".nc") file is generated containing (lon, lat) ocean basin point locations (at the paleo time of the age grid) and
         the mean distances of each point to all proximity features averaged over the point's lifetime (as determined by the age grid).
-        See the '-j' option. A similar output xyz file can be generated containing standard deviation (instead of mean) distance. See the '-k' option.
-    And a GMT grd file can be generated for each xyz file. See the '-w' option.
+        See the '-j' option.
+     3) A similar output ".xy" (or ".nc") file can be generated containing standard deviation (instead of mean) distance.
+        See the '-k' option.
+    If the '-w' option is specified then the output files are grid files (".nc"), otherwise they're xyz files (".xy").
     
     If an ocean basin point falls outside an age grid then it is ignored.
     
@@ -1652,7 +1669,7 @@ if __name__ == '__main__':
     NOTE: Separate the positional and optional arguments with '--' (workaround for bug in argparse module).
     For example...
 
-    python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid_0.nc 0 age_grid_1.nc 1 -d -w -j -k -- input.xy output
+    python %(prog)s -r rotations.rot -m topologies.gpml -b SubductionZone -s static_polygons.gpml -g age_grid_0.nc 0 age_grid_1.nc 1 -d -w -j -k -- output_dir
      """
     
     try:
@@ -1728,7 +1745,7 @@ if __name__ == '__main__':
                 help='For each input point write its standard deviation of distances to features averaged over its lifetime. '
                      'By default it is not written.')
         parser.add_argument('-w', '--output_grd_files', action='store_true',
-                help='Also generate a grd file (".nc") for each xyz file. '
+                help='Generate grid files (".nc") instead of xyz files (".xy"). '
                      'By default only xyz files are written. '
                      'Can only be specified if "ocean_basin_points_filename" is not specified '
                      '(ie, ocean basin points must be on a uniform lon/lat grid).')
@@ -1753,12 +1770,9 @@ if __name__ == '__main__':
                      'Can only be specified if "ocean_basin_grid_spacing", "upscale_mean_std_dev_grid_spacing" '
                      'and "output_grd_files" are not specified.')
         
-        parser.add_argument('output_filename_prefix', type=parse_unicode,
-                metavar='output_filename_prefix',
-                help='The output xy filename prefix used in all output filenames.')
-        parser.add_argument('-e', '--output_filename_extension', type=str, default='xy',
-                metavar='output_filename_extension',
-                help='The output xy filename extension. Defaults to "xy".')
+        parser.add_argument('output_directory', type=parse_unicode,
+                metavar='output_directory',
+                help='The output directory to write all the output files to.')
         
         # Parse command-line options.
         args = parser.parse_args()
@@ -1824,8 +1838,7 @@ if __name__ == '__main__':
                 args.output_distance_with_time,
                 args.output_mean_distance,
                 args.output_std_dev_distance,
-                args.output_filename_prefix,
-                args.output_filename_extension,
+                args.output_directory,
                 args.max_topological_reconstruction_time,
                 args.continent_obstacle_filenames,
                 args.anchor_plate_id,
