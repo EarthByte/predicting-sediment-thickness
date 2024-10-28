@@ -5,7 +5,7 @@ try:
 except ImportError:
     from gplately.ptt.utils.call_system_command import call_system_command
 import multiprocessing
-import os, shutil
+import os
 import sys
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -105,12 +105,8 @@ def generate_predicted_sedimentation_grid(
         age_distance_polynomial_coefficients,
         output_file_basename_prefix):
     
-    py_cmd='python3'
-    if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
-        py_cmd = 'python'
-    
     command_line = [
-            py_cmd,
+            sys.executable,  # python
             predict_sedimentation_script,
             '-d',
             distance_grid_filenames_format.format(time),

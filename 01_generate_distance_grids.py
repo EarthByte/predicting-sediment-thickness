@@ -4,7 +4,7 @@ try:
     from ptt.utils.call_system_command import call_system_command
 except ImportError:
     from gplately.ptt.utils.call_system_command import call_system_command
-import os, shutil
+import os, sys
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 """ ---------- Part 1 of the predicting-sediment-thickness workflow -----------
@@ -156,12 +156,9 @@ if not os.path.exists(output_dir):
 
 # ----- 
 def generate_distance_grids(times):
-    py_cmd='python3'
-    if os.environ.get('CONDA_PREFIX') or shutil.which('python3') is None:
-        py_cmd = 'python'
     
     # Calling the ocean basin proximity script.
-    command_line = [py_cmd, 'ocean_basin_proximity.py']
+    command_line = [sys.executable, 'ocean_basin_proximity.py']
 
     # Rotation files.
     command_line.append('-r')
