@@ -97,6 +97,18 @@ proximity_features_files = [
 continent_obstacle_files = [
     '/Applications/GPlates_2.3.0/GeoData/FeatureCollections/Coastlines/Global_EarthByte_GPlates_PresentDay_Coastlines.gpmlz',
 ]
+#
+# If continent obstacles are specified then any plate boundary sections with these specified feature types are also added as obstacles
+# (that water, and hence sediment, cannot pass through).
+#
+# This should default to mid-ocean ridges and subduction zones, but you can change this if desired.
+#
+# The format should match the format of http://www.gplates.org/docs/pygplates/generated/pygplates.FeatureType.html#pygplates.FeatureType.get_name .
+# For example, subduction zone is specified as SubductionZone (without the gpml: prefix).
+#
+# Note: These are ignored unless 'continent_obstacle_files' is also specified.
+#
+plate_boundary_obstacles = ["MidOceanRidge", "SubductionZone"]
 
 # Age grid files.
 #
@@ -165,6 +177,10 @@ def generate_distance_grids(times):
     if continent_obstacle_files:
         command_line.append('--continent_obstacle_filenames')
         command_line.extend('{}'.format(continent_obstacle_file) for continent_obstacle_file in continent_obstacle_files)
+        # Plate boundary obstacles (feature types).
+        # Can only be specified if "--continent_obstacle_filenames" is also specified.
+        command_line.append('--plate_boundary_obstacle_feature_types')
+        command_line.extend('{}'.format(plate_boundary_obstacle) for plate_boundary_obstacle in plate_boundary_obstacles)
     
     # Topological files.
     command_line.append('-s')

@@ -42,6 +42,11 @@ import sys
 import time as time_profile
 
 
+# Default plate boundary feature types used as obstacles that the shortest distance path
+# must go around (ie, water must flow around these).
+DEFAULT_PLATE_BOUNDARY_OBSTACLE_FEATURE_TYPES = ["MidOceanRidge", "SubductionZone"]
+
+
 # Enable CPU/memory profiling.
 ENABLE_CPU_PROFILING = False
 ENABLE_MEMORY_PROFILING = False
@@ -821,6 +826,7 @@ def proximity(
         output_standard_deviation_distance,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
+        plate_boundary_obstacle_feature_types = DEFAULT_PLATE_BOUNDARY_OBSTACLE_FEATURE_TYPES,  # only used in 'continent_obstacle_filenames' is not None
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None,
         clamp_mean_proximity_distance_radians = None):
@@ -835,6 +841,7 @@ def proximity(
 
     Continent obstacle filenames can optionally be specified. If they are specified then they will form geometry obstacles that the
     shortest distance path must go around (ie, water must flow around continents). Obstacles can be both polygons and polylines.
+    If continent obstacle filenames are specified then any plate boundary sections with the specified feature types are also added as obstacles.
     
     A threshold distance can be specified to reject proximities exceeding it.
 
@@ -901,8 +908,15 @@ def proximity(
     if continent_obstacle_filenames:
         #print('Creating shortest path grid...')
         shortest_path_grid = shortest_path.Grid(6)  # grid spacing of ~ 1.4 degrees
-        obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
         #memory_profile.print_object_memory_usage(shortest_path_grid, 'shortest_path_grid')
+        obstacle_features = pygplates.FeaturesFunctionArgument(continent_obstacle_filenames).get_features()
+        
+        if plate_boundary_obstacle_feature_types:
+            # Create pygplates.FeatureType's from the strings.
+            # We do this here since pygplates' objects are not yet pickable
+            # (which is required for objects passed via multiprocessing).
+            plate_boundary_obstacle_feature_types = [pygplates.FeatureType.create_from_qualified_string(feature_type)
+                for feature_type in plate_boundary_obstacle_feature_types]
     
     cpu_profile.end_read_input_data()
     cpu_profile.start_reconstruct_and_calculate_distances()
@@ -1093,23 +1107,25 @@ def proximity(
 
             cpu_profile.start_obstacle_reconstruct_resolve()
 
+            obstacle_reconstructed_geometries = []
+
+            # Reconstruct the continent obstacles.
             obstacle_reconstructed_feature_geometries = []
             pygplates.reconstruct(obstacle_features, rotation_model, obstacle_reconstructed_feature_geometries, time)
             obstacle_reconstructed_geometries = [obstacle_reconstructed_feature_geometry.get_reconstructed_geometry()
-                    for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
+                                                 for obstacle_reconstructed_feature_geometry in obstacle_reconstructed_feature_geometries]
 
-            topology_obstacle_feature_types = [pygplates.FeatureType.gpml_mid_ocean_ridge, pygplates.FeatureType.gpml_subduction_zone]
-            #topology_obstacle_feature_types = None
-            topology_obstacle_shared_boundary_sections = topological_model.topological_snapshot(time).get_resolved_topological_sections()
-            for topology_obstacle_shared_boundary_section in topology_obstacle_shared_boundary_sections:
-                # Skip sections that are not included in the list of boundary feature types (if any).
-                topology_obstacle_feature = topology_obstacle_shared_boundary_section.get_feature()
-                if (topology_obstacle_feature_types and
-                    topology_obstacle_feature.get_feature_type() not in topology_obstacle_feature_types):
-                    continue
-                
-                for topology_obstacle_shared_sub_segment in topology_obstacle_shared_boundary_section.get_shared_sub_segments():
-                    obstacle_reconstructed_geometries.append(topology_obstacle_shared_sub_segment.get_resolved_geometry())
+            # Get the plate boundary obstacles (if using any plate boundary feature types as obstacles).
+            if plate_boundary_obstacle_feature_types:
+                plate_boundary_obstacle_shared_boundary_sections = topological_model.topological_snapshot(time).get_resolved_topological_sections()
+                for plate_boundary_obstacle_shared_boundary_section in plate_boundary_obstacle_shared_boundary_sections:
+                    # Skip sections that are not included in the list of boundary feature types (if any).
+                    plate_boundary_obstacle_feature = plate_boundary_obstacle_shared_boundary_section.get_feature()
+                    if plate_boundary_obstacle_feature.get_feature_type() not in plate_boundary_obstacle_feature_types:
+                        continue
+                    
+                    for plate_boundary_obstacle_shared_sub_segment in plate_boundary_obstacle_shared_boundary_section.get_shared_sub_segments():
+                        obstacle_reconstructed_geometries.append(plate_boundary_obstacle_shared_sub_segment.get_resolved_geometry())
         
             cpu_profile.end_obstacle_reconstruct_resolve()
             cpu_profile.start_create_obstacle_grids()
@@ -1150,7 +1166,8 @@ def proximity(
             del shortest_path_obstacle_grid
             del obstacle_reconstructed_feature_geometries
             del obstacle_reconstructed_geometries
-            del topology_obstacle_shared_boundary_sections
+            if plate_boundary_obstacle_feature_types:
+                del plate_boundary_obstacle_shared_boundary_sections
             del proximity_reconstructed_geometries
         
             cpu_profile.end_calculate_obstacle_distances()
@@ -1366,6 +1383,7 @@ def generate_and_write_proximity_data(
         output_directory,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
+        plate_boundary_obstacle_feature_types = DEFAULT_PLATE_BOUNDARY_OBSTACLE_FEATURE_TYPES,  # only used in 'continent_obstacle_filenames' is not None
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None,
         clamp_mean_proximity_distance_radians = None,
@@ -1386,6 +1404,7 @@ def generate_and_write_proximity_data(
             output_standard_deviation_distance,
             max_topological_reconstruction_time,
             continent_obstacle_filenames,
+            plate_boundary_obstacle_feature_types,
             anchor_plate_id,
             proximity_distance_threshold_radians,
             clamp_mean_proximity_distance_radians)
@@ -1453,6 +1472,7 @@ def generate_and_write_proximity_data_parallel(
         output_directory,
         max_topological_reconstruction_time = None,
         continent_obstacle_filenames = None,
+        plate_boundary_obstacle_feature_types = DEFAULT_PLATE_BOUNDARY_OBSTACLE_FEATURE_TYPES,  # only used in 'continent_obstacle_filenames' is not None
         anchor_plate_id = 0,
         proximity_distance_threshold_radians = None,
         clamp_mean_proximity_distance_radians = None,
@@ -1577,6 +1597,7 @@ def generate_and_write_proximity_data_parallel(
                     output_directory,
                     max_topological_reconstruction_time,
                     continent_obstacle_filenames,
+                    plate_boundary_obstacle_feature_types,
                     anchor_plate_id,
                     proximity_distance_threshold_radians,
                     clamp_mean_proximity_distance_radians,
@@ -1604,6 +1625,7 @@ def generate_and_write_proximity_data_parallel(
                         output_directory,
                         max_topological_reconstruction_time,
                         continent_obstacle_filenames,
+                        plate_boundary_obstacle_feature_types,
                         anchor_plate_id,
                         proximity_distance_threshold_radians,
                         clamp_mean_proximity_distance_radians,
@@ -1643,8 +1665,9 @@ if __name__ == '__main__':
     specify the '-b' option (eg, for proximity to subduction zones specify '-b SubductionZone').
 
     Optional continent obstacles can be specified that the shortest distance path must go around (ie, water flowing around continents, rather than through).
-    If specified then mid-ocean ridges and subduction zones of resolved topologies are also added as obstacles (that water, and hence sediment, cannot pass through).
-    If *not* specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
+    If continent obstacles are specified then any resolved plate boundary sections with specified feature types (defaulting to mid-ocean ridges and subduction zones)
+    are also added as obstacles (that water, and hence sediment, cannot pass through), otherwise plate boundary sections are ignored (as obstacles).
+    If continent obstacles are *not* specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries.
     
     The output (for each input age grid) can be any or all of the following:
      1) For each time from the paleo time of the age grid to the maximum age of all ocean basin points (determined by the age grid) an output ".xy" (or ".nc") file
@@ -1704,6 +1727,16 @@ if __name__ == '__main__':
                      'If specified then mid-ocean ridges and subduction zones of resolved topologies are also added as obstacles (that water, and hence sediment, cannot pass through). '
                      'If not specifed then distances are minimum straight-line (great circle arc) distances from ocean points to proximity geometries. '
                      'Obstacles can be both polygons and polylines. Default is no obstacles.')
+        parser.add_argument('-pbo', '--plate_boundary_obstacle_feature_types', type=str, nargs='*',
+                metavar='plate_boundary_obstacle_feature_type',
+                help='The feature type(s) to select for plate boundary obstacles. '
+                     'Can only be specified if "continent_obstacle_filenames" is also specified. '
+                     'If not specified then defaults to ({}). '
+                     'But you can explicitly specify this argument with no feature types to force no plate boundary obstacles. '
+                     'The format should match the format of '
+                     'http://www.gplates.org/docs/pygplates/generated/pygplates.FeatureType.html#pygplates.FeatureType.get_name . '
+                     'For example, subduction zone is specified as SubductionZone (without the gpml: prefix).'.format(
+                            ', '.join('"{}"'.format(feature_type) for feature_type in DEFAULT_PLATE_BOUNDARY_OBSTACLE_FEATURE_TYPES)))
         parser.add_argument('-s', '--topological_reconstruction_filenames', type=str, nargs='+', required=True,
                 metavar='topological_reconstruction_filename',
                 help='The filenames of the topological files used to incrementally reconstruct the (paleo) ocean basin points.')
@@ -1828,6 +1861,14 @@ if __name__ == '__main__':
                 # Exceeds circumference of Earth so no need for clamping.
                 clamp_mean_proximity_distance_radians = None
         
+        # Plate boundary obstacles.
+        if args.plate_boundary_obstacle_feature_types is not None:
+            if args.continent_obstacle_filenames is None:
+                raise argparse.ArgumentTypeError("'plate_boundary_obstacle_feature_types' cannot be specified unless 'continent_obstacle_filenames' is also specified.")
+            plate_boundary_obstacle_feature_types = args.plate_boundary_obstacle_feature_types  # note: could be empty if user explicitly specified an empty list in argument
+        else:
+            plate_boundary_obstacle_feature_types = DEFAULT_PLATE_BOUNDARY_OBSTACLE_FEATURE_TYPES  # use default feature types if user did not use argument at all
+        
         generate_and_write_proximity_data_parallel(
                 input_points,
                 args.rotation_filenames,
@@ -1843,6 +1884,7 @@ if __name__ == '__main__':
                 args.output_directory,
                 args.max_topological_reconstruction_time,
                 args.continent_obstacle_filenames,
+                plate_boundary_obstacle_feature_types,
                 args.anchor_plate_id,
                 proximity_distance_threshold_radians,
                 clamp_mean_proximity_distance_radians,

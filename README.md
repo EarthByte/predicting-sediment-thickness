@@ -67,6 +67,9 @@ The relationship for sedimentation rate and thickness was based on the calibrati
       + The shortest distance (from ocean points to passive margins) must go around the continents (ie, water flows around continents).
       + This can be `None` to just use the minimum straight-line distance to passive margins (ignoring continent obstacles).
       + Note: These can be *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).
+      + Set the `plate_boundary_obstacles` variable to those plate boundary feature types that also act as obstacles (to water flow).
+        + This should typically be left as the default (mid-ocean ridges and subduction zones), but you can change this if desired.
+        + Note: This parameter is ignored unless `continent_obstacle_files` is also specified.
     + Set the `grid_spacing` variable to the desired grid spacing (in degrees, e.g.  0.1) of the generated distance grids.
       + The output distance grids are upscaled from the grid spacing used internally for computations (`internal_grid_spacing`).
     + Set the `internal_grid_spacing` variable to grid spacing (in degrees) used for internal distance computations.
@@ -124,3 +127,7 @@ http://store.pangaea.de/Publications/WobbeF_et_al_2014/sedthick_world_v3_5min_ep
 ## Reference
 
 Dutkiewicz, A., Müller, R.D., Wang, X., O’Callaghan, S., Cannon, J. and Wright, N.M., 2017. Predicting sediment thickness on vanished ocean crust since 200 Ma. Geochemistry, Geophysics, Geosystems, 18, 4586-4603, DOI:  https://doi.org/10.1002/2017GC007258.
+
+> __Note:__ The paper forgot to mention that mid-ocean ridges and subduction zones were hardwired to act as obstacles to water flow
+(in addition to the continents). This has now been made a configurable parameter (see `plate_boundary_obstacles` above) that
+defaults to mid-ocean ridges and subduction zones.
