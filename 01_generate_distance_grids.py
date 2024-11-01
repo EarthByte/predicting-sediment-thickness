@@ -81,7 +81,9 @@ anchor_plate_id = 0
 # Passive margin files (that distances are calculated relative to).
 #
 # Note: These can be passive margins generated from *contoured* continents (see https://github.com/EarthByte/continent-contouring).
-#       Ensure that the same rotation model is used for contouring (as is used in this workflow).
+#       Ensure that the same rotation (and topological) model is used for contouring (as is used in this workflow).
+#       And ensure that the time range used in the *continent contouring* workflow matches, or exceeds, 'max_topological_reconstruction_time'.
+#
 proximity_features_files = [
 	'input_data/Global_EarthByte_GeeK07_COBLineSegments_2016_v4.gpmlz', # this is included in this repository
 ]
@@ -91,7 +93,8 @@ proximity_features_files = [
 # Obstacles can be both polygons and polylines.
 #
 # Note: These can be *contoured* continents (see https://github.com/EarthByte/continent-contouring).
-#       Ensure that the same rotation model is used for contouring (as is used in this workflow).
+#       Ensure that the same rotation (and topological) model is used for contouring (as is used in this workflow).
+#       And ensure that the time range used in the *continent contouring* workflow matches, or exceeds, 'max_topological_reconstruction_time'.
 #
 #continent_obstacle_files = None
 continent_obstacle_files = [

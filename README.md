@@ -55,25 +55,27 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 - Open the `01_generate_distance_grids.py` script and:
     + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate distance grids.
     + Set the `age_grid_filenames_format` variable to the location/filenames of the downloaded age grids.
-      + Note: This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
+      > __Note:__ This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
     + Set the `data_dir` variable to the location of all your topological files.
     + Set the `rotation_filenames` and `topology_filenames` variables to match those in the `data_dir`.
     + Set the `max_topological_reconstruction_time` variable to oldest age supported by the topological model (eg, 250, 410, or 1000).
     + Set the `anchor_plate_id` variable to the reference frame in which to generate the distance grids.
-      + Note: The age grids must also be in this reference frame.
+      > __Note:__ The age grids must also be in this reference frame.
     + Set the `proximity_features_files` variable to the passive margin files (that distances are calculated relative to).
-      + Note: These can be passive margins generated from *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).
+      > __Note:__ These can be passive margins generated from *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).  
+      In this case, ensure that the same rotation (and topological) model is used for contouring (as is used in `rotation_filenames` and `topology_filenames`). And ensure that passive margins are generated as far back as `max_topological_reconstruction_time`.
     + Set the `continent_obstacle_files` variable to the continent files (obstacles to water flow).
+      > __Note:__ These can be *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).  
+      In this case, ensure that the same rotation (and topological) model is used for contouring (as is used in `rotation_filenames` and `topology_filenames`). And ensure that passive margins are generated as far back as `max_topological_reconstruction_time`.
       + The shortest distance (from ocean points to passive margins) must go around the continents (ie, water flows around continents).
       + This can be `None` to just use the minimum straight-line distance to passive margins (ignoring continent obstacles).
-      + Note: These can be *contoured* continents (see [here](https://github.com/EarthByte/continent-contouring)).
       + Set the `plate_boundary_obstacles` variable to those plate boundary feature types that also act as obstacles (to water flow).
+        > __Note:__ This parameter is ignored unless `continent_obstacle_files` is also specified.
         + This should typically be left as the default (mid-ocean ridges and subduction zones), but you can change this if desired.
-        + Note: This parameter is ignored unless `continent_obstacle_files` is also specified.
     + Set the `grid_spacing` variable to the desired grid spacing (in degrees, e.g.  0.1) of the generated distance grids.
       + The output distance grids are upscaled from the grid spacing used internally for computations (`internal_grid_spacing`).
     + Set the `internal_grid_spacing` variable to grid spacing (in degrees) used for internal distance computations.
-      + Note: This parameter significantly affects the time it takes to generate distance grids in this workflow.
+      > __Note:__ This parameter significantly affects the time it takes to generate distance grids in this workflow.
     + Set the `use_all_cpus` variable to the number of CPU cores to use (eg, False, True or a specific number).
     + Set the `max_memory_usage_in_gb` variable to the amount of memory (in GB) to use.
       + For example, set it to the amount of physical RAM (or less if running other workflows simultaneously).
@@ -87,7 +89,7 @@ The relationship for sedimentation rate and thickness was based on the calibrati
 - Open the `02_generate_predicted_sedimentation_grids.py` script and:
     + Set the `min_time`, `max_time` and `time_step` time range variables for the times to generate sedimentation grids.
     + Set the `age_grid_filenames_format` variable to the location/filenames of the downloaded age grids.
-      + Note: This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
+      > __Note:__ This format string includes a pattern (such as `{:.1f}`) that will be substituted with the age grid paleo times.
     + Set the `distance_grid_spacing` variable to equal the `grid_spacing` variable used to generate the distance grids in part 1.
     + Set the `grid_spacing` variable to your desired spacing in degrees (of the output sedimentation grids).
     + Set the `use_all_cpus` variable to the number of CPU cores to use (eg, False, True or a specific number).
